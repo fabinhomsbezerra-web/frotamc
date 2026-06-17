@@ -753,6 +753,20 @@ input[type="hidden"] { display: none; }
 </div>
 
 <!-- ════════════════════════════
+     MODAL: Editar Registro (admin)
+════════════════════════════ -->
+<div class="modal-overlay" id="modalEditRecord">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header flex-between">
+      <div class="modal-title" id="editRecordTitle">✏️ Editar lançamento</div>
+      <button class="btn-icon" onclick="closeModal('modalEditRecord')">✕</button>
+    </div>
+    <div class="modal-body" id="editRecordContent"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════
      MODAL: Confirmar Exclusão
 ════════════════════════════ -->
 <div class="modal-overlay" id="modalConfirmDelete">
@@ -1678,6 +1692,7 @@ function showRecordDetail(id) {
   if(r.km!=null)vals.push(`<tr><td class="text-muted" style="padding:6px 0;">📍 Quilometragem</td><td style="font-weight:700;text-align:right">${Number(r.km).toLocaleString('pt-BR')} km</td></tr>`);
   if(r.hor!=null)vals.push(`<tr><td class="text-muted" style="padding:6px 0;">⏱️ Horímetro</td><td style="font-weight:700;text-align:right">${Number(r.hor).toLocaleString('pt-BR')} h</td></tr>`);
   const canDelete=currentUser.role==='admin'||r.userId===currentUser.id;
+  const isAdmin=currentUser.role==='admin';
   document.getElementById('modalDetailContent').innerHTML=`
     <div class="flex-center mb-12">
       <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
@@ -1691,7 +1706,8 @@ function showRecordDetail(id) {
     <div class="text-sm text-muted" style="margin-bottom:6px">👤 ${u?u.name:r.userId}</div>
     ${r.gps?`<div class="text-sm text-muted" style="margin-bottom:6px">📍 ${r.gps.lat.toFixed(5)}, ${r.gps.lng.toFixed(5)}</div>`:''}
     ${r.obs?`<div class="alert alert-info" style="margin-top:12px"><span class="alert-icon">💬</span><span>${r.obs}</span></div>`:''}
-    ${canDelete?`<div class="divider"></div><button class="btn btn-danger" style="margin-top:4px" onclick="promptDeleteRecord('${r.id}')">🗑️ Excluir este registro</button>`:''}
+    ${isAdmin?`<div class="divider"></div><button class="btn btn-secondary" style="margin-top:4px" onclick="editRecord('${r.id}')">✏️ Editar lançamento</button>`:''}
+    ${canDelete?`<button class="btn btn-danger" style="margin-top:8px" onclick="promptDeleteRecord('${r.id}')">🗑️ Excluir este registro</button>`:''}
   `;
   openModal('modalDetail');
 }
@@ -1737,6 +1753,7 @@ function showExpenseDetail(id) {
   const v=DB.vehicles.find(x=>x.id===r.vehicleId);
   const u=DB.users.find(x=>x.id===r.userId);
   const canDelete=currentUser.role==='admin'||r.userId===currentUser.id;
+  const isAdmin=currentUser.role==='admin';
   document.getElementById('modalDetailContent').innerHTML=`
     <div class="flex-center mb-12">
       <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
@@ -1753,7 +1770,8 @@ function showExpenseDetail(id) {
     <div class="text-sm text-muted" style="margin-bottom:6px">👤 ${u?u.name:r.userId}</div>
     ${r.gps?`<div class="text-sm text-muted" style="margin-bottom:6px">📍 ${r.gps.lat.toFixed(5)}, ${r.gps.lng.toFixed(5)}</div>`:''}
     ${r.obs?`<div class="alert alert-info" style="margin-top:12px"><span class="alert-icon">💬</span><span>${r.obs}</span></div>`:''}
-    ${canDelete?`<div class="divider"></div><button class="btn btn-danger" style="margin-top:4px" onclick="promptDeleteExpense('${r.id}')">🗑️ Excluir esta despesa</button>`:''}
+    ${isAdmin?`<div class="divider"></div><button class="btn btn-secondary" style="margin-top:4px" onclick="editExpense('${r.id}')">✏️ Editar lançamento</button>`:''}
+    ${canDelete?`<button class="btn btn-danger" style="margin-top:8px" onclick="promptDeleteExpense('${r.id}')">🗑️ Excluir esta despesa</button>`:''}
   `;
   openModal('modalDetail');
 }
@@ -1773,6 +1791,150 @@ async function confirmDeleteExpense(id) {
   saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Despesa excluída');
   renderHome();
   if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+}
+
+// ── EDIÇÃO DE LANÇAMENTOS (apenas admin) ──
+function editRecord(id) {
+  const r=DB.records.find(x=>x.id===id); if(!r) return;
+  const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+  document.getElementById('editRecordTitle').textContent='✏️ Editar registro';
+  const dtLocal = nowLocalForInput(new Date(r.dt));
+  document.getElementById('editRecordContent').innerHTML=`
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:28px">${v?getEmoji(v.tipo):'🚗'}</span>
+      <div><div style="font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted text-sm">${v?v.placa:''}</div></div>
+    </div>
+    <input type="hidden" id="editRecordId" value="${r.id}">
+    <div class="form-group">
+      <label class="form-label">📅 Data e hora</label>
+      <input type="datetime-local" class="form-input" id="editRecordDate" value="${dtLocal}">
+    </div>
+    ${(v&&(v.medicao==='km'||v.medicao==='ambos'))?`<div class="form-group">
+      <label class="form-label">📍 Quilometragem</label>
+      <input type="text" class="form-input" id="editRecordKm" value="${r.km!=null?String(r.km).replace('.',','):''}" placeholder="Ex: 45820,5" inputmode="decimal">
+    </div>`:''}
+    ${(v&&(v.medicao==='hor'||v.medicao==='ambos'))?`<div class="form-group">
+      <label class="form-label">⏱️ Horímetro</label>
+      <input type="text" class="form-input" id="editRecordHor" value="${r.hor!=null?String(r.hor).replace('.',','):''}" placeholder="Ex: 3420,5" inputmode="decimal">
+    </div>`:''}
+    <div class="form-group">
+      <label class="form-label">💬 Observação</label>
+      <textarea class="form-input" id="editRecordObs" rows="3" style="resize:none">${r.obs||''}</textarea>
+    </div>
+    <div class="alert alert-warning" style="margin-bottom:16px">
+      <span class="alert-icon">⚠️</span>
+      <span>Editar este registro pode afetar a referência de "última leitura" do veículo. Confira os valores antes de salvar.</span>
+    </div>
+    <button class="btn btn-primary" onclick="saveEditRecord()">✓ Salvar alterações</button>
+  `;
+  closeModal('modalDetail');
+  openModal('modalEditRecord');
+}
+async function saveEditRecord() {
+  const id=document.getElementById('editRecordId').value;
+  const r=DB.records.find(x=>x.id===id); if(!r) return;
+  const kmEl=document.getElementById('editRecordKm');
+  const horEl=document.getElementById('editRecordHor');
+  const dateEl=document.getElementById('editRecordDate');
+  const obsEl=document.getElementById('editRecordObs');
+  let newKm = kmEl ? (kmEl.value.trim()!==''? parseDecimal(kmEl.value): null) : r.km;
+  let newHor = horEl ? (horEl.value.trim()!==''? parseDecimal(horEl.value): null) : r.hor;
+  if((kmEl&&kmEl.value.trim()!==''&&isNaN(newKm)) || (horEl&&horEl.value.trim()!==''&&isNaN(newHor))){ showToast('❌ Valor inválido!'); return; }
+  const newDt = dateEl.value ? new Date(dateEl.value).toISOString() : r.dt;
+  const newObs = obsEl.value.trim();
+  showLoading('Salvando...');
+  try {
+    const { error } = await supa.from('registros').update({ km:newKm, hor:newHor, dt:newDt, obs:newObs||null }).eq('id', id);
+    if (error) throw new Error(error.message);
+    r.km=newKm; r.hor=newHor; r.dt=newDt; r.obs=newObs;
+    // Atualiza referência de última leitura do veículo, caso este seja o registro mais recente
+    const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+    if (v) {
+      const vehicleRecs = DB.records.filter(x=>x.vehicleId===v.id).sort((a,b)=>new Date(b.dt)-new Date(a.dt));
+      const latest = vehicleRecs[0];
+      if (latest) {
+        const updates={};
+        if (latest.km!=null && latest.km!==v.lastKm) { v.lastKm=latest.km; updates.last_km=latest.km; }
+        if (latest.hor!=null && latest.hor!==v.lastHor) { v.lastHor=latest.hor; updates.last_hor=latest.hor; }
+        if (Object.keys(updates).length) await supa.from('veiculos').update(updates).eq('id', v.id);
+      }
+    }
+    saveLocal(); hideLoading(); closeModal('modalEditRecord');
+    showToast('✅ Registro atualizado!');
+    renderHome();
+    if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+  } catch(e) {
+    hideLoading();
+    showToast('❌ Erro ao salvar: '+(e.message||'tente novamente'), 5000);
+  }
+}
+function editExpense(id) {
+  const r=DB.expenses.find(x=>x.id===id); if(!r) return;
+  const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+  document.getElementById('editRecordTitle').textContent='✏️ Editar despesa';
+  const dtLocal = nowLocalForInput(new Date(r.dt));
+  const cats=['Combustível','Manutenção','Pneu','Peças','Pedágio','Lavagem','Multa','Outro'];
+  document.getElementById('editRecordContent').innerHTML=`
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:28px">${v?getEmoji(v.tipo):'🚗'}</span>
+      <div><div style="font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted text-sm">${v?v.placa:''}</div></div>
+    </div>
+    <input type="hidden" id="editExpenseId" value="${r.id}">
+    <div class="form-group">
+      <label class="form-label">📅 Data e hora</label>
+      <input type="datetime-local" class="form-input" id="editExpenseDate" value="${dtLocal}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">💰 Valor (R$)</label>
+      <input type="text" class="form-input" id="editExpenseValor" value="${r.valor!=null?String(r.valor).replace('.',','):''}" placeholder="Ex: 150,00" inputmode="decimal">
+    </div>
+    <div class="form-group">
+      <label class="form-label">🏷️ Categoria</label>
+      <div class="tag-row" id="editCatTags">
+        ${cats.map(c=>`<span class="tag ${r.categoria===c?'selected':''}" data-cat="${c}" onclick="selectEditCategory(this)">${c}</span>`).join('')}
+      </div>
+      <input type="hidden" id="editExpenseCategoria" value="${r.categoria||''}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">💬 Observação</label>
+      <textarea class="form-input" id="editExpenseObs" rows="3" style="resize:none">${r.obs||''}</textarea>
+    </div>
+    <button class="btn btn-primary" onclick="saveEditExpense()">✓ Salvar alterações</button>
+  `;
+  closeModal('modalDetail');
+  openModal('modalEditRecord');
+}
+function selectEditCategory(el) {
+  const already = el.classList.contains('selected');
+  el.parentElement.querySelectorAll('.tag').forEach(t=>t.classList.remove('selected'));
+  document.getElementById('editExpenseCategoria').value = already ? '' : (el.dataset.cat||'');
+  if(!already) el.classList.add('selected');
+}
+async function saveEditExpense() {
+  const id=document.getElementById('editExpenseId').value;
+  const r=DB.expenses.find(x=>x.id===id); if(!r) return;
+  const valorEl=document.getElementById('editExpenseValor');
+  const dateEl=document.getElementById('editExpenseDate');
+  const catEl=document.getElementById('editExpenseCategoria');
+  const obsEl=document.getElementById('editExpenseObs');
+  let newValor = valorEl.value.trim()!=='' ? parseDecimal(valorEl.value) : null;
+  if (valorEl.value.trim()!=='' && (isNaN(newValor)||newValor<0)) { showToast('❌ Valor inválido!'); return; }
+  const newDt = dateEl.value ? new Date(dateEl.value).toISOString() : r.dt;
+  const newCat = catEl.value || null;
+  const newObs = obsEl.value.trim();
+  showLoading('Salvando...');
+  try {
+    const { error } = await supa.from('despesas').update({ valor:newValor, categoria:newCat, dt:newDt, obs:newObs||null }).eq('id', id);
+    if (error) throw new Error(error.message);
+    r.valor=newValor; r.categoria=newCat; r.dt=newDt; r.obs=newObs;
+    saveLocal(); hideLoading(); closeModal('modalEditRecord');
+    showToast('✅ Despesa atualizada!');
+    renderHome();
+    if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+  } catch(e) {
+    hideLoading();
+    showToast('❌ Erro ao salvar: '+(e.message||'tente novamente'), 5000);
+  }
 }
 
 // ── OPERADORES ──

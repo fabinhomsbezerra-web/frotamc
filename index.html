@@ -2,13 +2,18 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#1A56DB">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="FrotaMC">
 <title>FrotaMC</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
 <style>
 :root {
   --primary: #1A56DB;
@@ -54,9 +59,9 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
-body { overflow-x: hidden; }
+body { overflow: hidden; position: fixed; width: 100%; }
 
-.screen { display: none; min-height: 100vh; flex-direction: column; }
+.screen { display: none; height: 100vh; height: 100dvh; flex-direction: column; overflow: hidden; }
 .screen.active { display: flex; }
 
 /* ── HEADER ── */
@@ -348,11 +353,13 @@ select.form-input { cursor: pointer; }
 
 /* ── LOGIN ── */
 .login-screen {
-  min-height: 100vh; display: flex;
-  flex-direction: column; align-items: center;
+  display: none;
+  height: 100vh; height: 100dvh; flex-direction: column; align-items: center;
   justify-content: center; padding: 24px;
   background: var(--bg);
+  overflow-y: auto;
 }
+.login-screen.active { display: flex; }
 .login-logo {
   font-size: 48px; margin-bottom: 8px;
 }
@@ -470,7 +477,7 @@ input[type="hidden"] { display: none; }
 <!-- ════════════════════════════
      TELA DE LOGIN
 ════════════════════════════ -->
-<div id="screen-login" class="login-screen active">
+<div id="screen-login" class="screen login-screen active">
   <div class="login-logo">🚛</div>
   <div class="login-brand">FrotaMC</div>
   <p class="login-tagline">Controle de quilometragem e horímetro</p>
@@ -504,7 +511,7 @@ input[type="hidden"] { display: none; }
     </div>
     <div style="flex:1"></div>
     <button class="btn-icon" onclick="toggleTheme()" title="Tema">🌙</button>
-    <button class="btn-icon" onclick="doLogout()" title="Sair">👤</button>
+    <button class="btn-icon" onclick="confirmLogout()" title="Sair">🚪</button>
   </div>
   <div class="content">
     <button class="btn btn-primary" onclick="startRegister('medicao')" style="font-size:20px;padding:22px;margin-bottom:12px;">
@@ -555,6 +562,7 @@ input[type="hidden"] { display: none; }
     <div class="header-logo">🚗 Veículos</div>
     <div style="flex:1"></div>
     <button class="btn-icon" id="addVehicleBtn" onclick="openAddVehicle()" title="Adicionar">➕</button>
+    <button class="btn-icon" onclick="confirmLogout()" title="Sair">🚪</button>
   </div>
   <div class="content">
     <div id="vehicleListEl"></div>
@@ -575,6 +583,7 @@ input[type="hidden"] { display: none; }
     <div class="header-logo">👥 Operadores</div>
     <div style="flex:1"></div>
     <button class="btn-icon" onclick="openAddOperator()" title="Adicionar">➕</button>
+    <button class="btn-icon" onclick="confirmLogout()" title="Sair">🚪</button>
   </div>
   <div class="content">
     <div id="operatorListEl"></div>
@@ -595,6 +604,7 @@ input[type="hidden"] { display: none; }
     <div class="header-logo">📊 Relatórios</div>
     <div style="flex:1"></div>
     <button class="btn-icon" onclick="exportData()" title="Exportar">📤</button>
+    <button class="btn-icon" onclick="confirmLogout()" title="Sair">🚪</button>
   </div>
   <div class="content">
     <!-- Dashboard stats -->
@@ -734,6 +744,25 @@ input[type="hidden"] { display: none; }
         <div class="form-hint" id="adjustHorHint"></div>
       </div>
       <button class="btn btn-primary" onclick="saveAdjust()">✓ Salvar Reajuste</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     MODAL: Confirmar Logout
+════════════════════════════ -->
+<div class="modal-overlay" id="modalLogout">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">🚪 Encerrar sessão?</div>
+    </div>
+    <div class="modal-body">
+      <div class="text-sm text-muted" style="margin-bottom:20px">Você precisará informar usuário e senha novamente para entrar.</div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-secondary" onclick="closeModal('modalLogout')">Cancelar</button>
+        <button class="btn btn-danger" onclick="closeModal('modalLogout');doLogout()">🚪 Sair</button>
+      </div>
     </div>
   </div>
 </div>
@@ -982,15 +1011,32 @@ async function afterLogin(scrollTop) {
   document.getElementById('headerUser').textContent = `👤 ${currentUser.name}`;
   document.getElementById('addVehicleBtn').style.display = currentUser.role!=='admin' ? 'none' : '';
   document.querySelectorAll('.admin-only').forEach(el => { el.style.display = currentUser.role==='admin' ? '' : 'none'; });
-  // Envia pendentes ANTES de buscar da nuvem, para não perder registros locais
-  if (navigator.onLine) await syncPending();
-  const ok = await syncFromCloud();
-  if (!ok) { loadLocal(); showToast('📵 Modo offline — dados locais'); }
+  // Mostra a Home imediatamente: o usuário não deve ficar esperando a sincronização para ver o app
   showScreen('home', scrollTop);
+  try {
+    // Envia pendentes ANTES de buscar da nuvem, para não perder registros locais
+    if (navigator.onLine) await syncPending();
+    const ok = await syncFromCloud();
+    if (!ok) { loadLocal(); showToast('📵 Modo offline — dados locais'); }
+  } catch(e) {
+    loadLocal();
+    showToast('📵 Modo offline — dados locais');
+  }
 }
-function doLogout() { currentUser=null; localStorage.removeItem('fc_user'); showScreen('login'); }
+function confirmLogout() { openModal('modalLogout'); }
+function doLogout() {
+  currentUser = null;
+  localStorage.removeItem('fc_user');
+  document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+  showScreen('login');
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+}
 async function checkSession() {
-  try { const s=localStorage.getItem('fc_user'); if(s){ currentUser=JSON.parse(s); await afterLogin(false); return; } } catch(e) {}
+  try {
+    const s = localStorage.getItem('fc_user');
+    if (s) { currentUser = JSON.parse(s); await afterLogin(false); return; }
+  } catch(e) {}
   showScreen('login');
 }
 

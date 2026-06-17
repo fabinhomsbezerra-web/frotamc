@@ -1,0 +1,1983 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#1A56DB">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="FrotaMC">
+<title>FrotaMC</title>
+<link rel="manifest" href="manifest.json">
+<style>
+:root {
+  --primary: #1A56DB;
+  --primary-dark: #1347BB;
+  --primary-light: #E8F0FE;
+  --success: #057A55;
+  --success-bg: #E3FCEF;
+  --warning: #92400E;
+  --warning-bg: #FEF3C7;
+  --danger: #9B1C1C;
+  --danger-bg: #FDE8E8;
+  --bg: #F8FAFC;
+  --surface: #FFFFFF;
+  --surface2: #F1F5F9;
+  --text: #0F172A;
+  --text2: #475569;
+  --text3: #94A3B8;
+  --border: #E2E8F0;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.12);
+}
+[data-theme="dark"] {
+  --primary: #3B82F6;
+  --primary-dark: #2563EB;
+  --primary-light: #1E3A5F;
+  --success: #34D399;
+  --success-bg: #064E3B;
+  --warning: #FCD34D;
+  --warning-bg: #451A03;
+  --danger: #F87171;
+  --danger-bg: #450A0A;
+  --bg: #0F172A;
+  --surface: #1E293B;
+  --surface2: #0F172A;
+  --text: #F1F5F9;
+  --text2: #94A3B8;
+  --text3: #475569;
+  --border: #334155;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-lg: 0 10px 25px rgba(0,0,0,0.4);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
+body { overflow-x: hidden; }
+
+.screen { display: none; min-height: 100vh; flex-direction: column; }
+.screen.active { display: flex; }
+
+/* ── HEADER ── */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-logo { font-size: 20px; font-weight: 700; color: var(--primary); letter-spacing: -0.5px; }
+.header-sub { font-size: 13px; color: var(--text2); flex: 1; }
+.btn-icon {
+  width: 40px; height: 40px;
+  border: none; background: var(--surface2);
+  border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--text2);
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.btn-icon:active { background: var(--border); }
+
+/* ── SCROLL AREA ── */
+.content { flex: 1; overflow-y: auto; padding: 16px; padding-bottom: 100px; }
+.content.no-pad { padding: 0; }
+
+/* ── BOTTOM NAV ── */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.nav-item {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 10px 4px 8px;
+  border: none; background: none; cursor: pointer;
+  gap: 4px; color: var(--text3);
+  font-size: 11px; font-weight: 500;
+  transition: color 0.15s;
+}
+.nav-item.active { color: var(--primary); }
+.nav-icon { font-size: 22px; line-height: 1; }
+.badge {
+  background: var(--danger); color: white;
+  font-size: 10px; font-weight: 700;
+  border-radius: 99px; padding: 1px 5px;
+  min-width: 16px; text-align: center;
+  position: absolute; top: 6px; right: calc(50% - 20px);
+}
+
+/* ── BUTTONS ── */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 16px;
+  border: none; border-radius: var(--radius);
+  font-size: 17px; font-weight: 600; cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  text-decoration: none;
+}
+.btn:active { opacity: 0.85; transform: scale(0.98); }
+.btn-primary { background: var(--primary); color: white; }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-success { background: var(--success); color: white; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-sm { padding: 10px 16px; font-size: 14px; border-radius: var(--radius-sm); }
+.btn-outline {
+  background: transparent; color: var(--primary);
+  border: 2px solid var(--primary);
+  padding: 14px; border-radius: var(--radius);
+  font-size: 16px; font-weight: 600; cursor: pointer;
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: background 0.15s;
+}
+.btn-outline:active { background: var(--primary-light); }
+
+/* ── CARDS ── */
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.card-pad { padding: 16px; }
+.card + .card { margin-top: 12px; }
+
+/* ── FORM ── */
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block; font-size: 14px;
+  font-weight: 600; color: var(--text2);
+  margin-bottom: 6px;
+}
+.form-input {
+  width: 100%; padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 17px; color: var(--text);
+  background: var(--surface);
+  outline: none; transition: border-color 0.15s;
+  -webkit-appearance: none;
+}
+.form-input:focus { border-color: var(--primary); }
+.form-input.error { border-color: var(--danger); }
+select.form-input { cursor: pointer; }
+.form-hint { font-size: 12px; color: var(--text3); margin-top: 4px; }
+.form-error { font-size: 12px; color: var(--danger); margin-top: 4px; display: none; }
+
+/* ── VEHICLE PICKER ── */
+.vehicle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.vehicle-card {
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  text-align: center;
+}
+.vehicle-card:active { transform: scale(0.97); }
+.vehicle-card.selected { border-color: var(--primary); background: var(--primary-light); }
+.vehicle-emoji { font-size: 36px; line-height: 1; }
+.vehicle-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.vehicle-plate { font-size: 12px; color: var(--text2); font-family: monospace; }
+
+/* ── PHOTO CAPTURE ── */
+.photo-area {
+  background: var(--surface2);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  aspect-ratio: 4/3;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 12px; cursor: pointer;
+  position: relative; overflow: hidden;
+  transition: border-color 0.15s;
+}
+.photo-area:active { border-color: var(--primary); }
+.photo-area img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%; object-fit: cover;
+}
+.photo-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px; color: white;
+}
+.photo-icon { font-size: 48px; }
+.photo-text { font-size: 16px; font-weight: 600; color: var(--text2); }
+
+/* ── OCR RESULT ── */
+.ocr-result {
+  background: var(--primary-light);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 12px;
+}
+.ocr-icon { font-size: 24px; }
+.ocr-text { flex: 1; font-size: 14px; color: var(--primary-dark); }
+.ocr-value { font-size: 20px; font-weight: 700; color: var(--primary); }
+
+/* ── ALERTS ── */
+.alert {
+  padding: 12px 16px; border-radius: var(--radius-sm);
+  font-size: 14px; display: flex; gap: 10px; align-items: flex-start;
+  margin-bottom: 12px;
+}
+.alert-icon { font-size: 20px; flex-shrink: 0; }
+.alert-warning { background: var(--warning-bg); color: var(--warning); border: 1px solid #FCD34D; }
+.alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #FCA5A5; }
+.alert-success { background: var(--success-bg); color: var(--success); border: 1px solid #6EE7B7; }
+.alert-info { background: var(--primary-light); color: var(--primary-dark); border: 1px solid #93C5FD; }
+
+/* ── STATUS BADGES ── */
+.badge-pill {
+  display: inline-flex; align-items: center;
+  padding: 4px 10px; border-radius: 99px;
+  font-size: 12px; font-weight: 600; gap: 4px;
+}
+.badge-ok { background: var(--success-bg); color: var(--success); }
+.badge-warn { background: var(--warning-bg); color: var(--warning); }
+.badge-danger { background: var(--danger-bg); color: var(--danger); }
+.badge-info { background: var(--primary-light); color: var(--primary); }
+
+/* ── STATS ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.stat-label { font-size: 13px; color: var(--text2); margin-bottom: 4px; }
+.stat-value { font-size: 28px; font-weight: 700; color: var(--text); line-height: 1; }
+.stat-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+/* ── LIST ── */
+.list-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.list-item:last-child { border-bottom: none; }
+.list-item:active { background: var(--surface2); }
+.list-icon {
+  width: 46px; height: 46px;
+  border-radius: 50%; background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+.list-content { flex: 1; min-width: 0; }
+.list-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.list-sub { font-size: 13px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.list-arrow { color: var(--text3); font-size: 20px; }
+.list-meta { font-size: 12px; color: var(--text3); text-align: right; }
+
+/* ── SECTION HEADER ── */
+.section-header {
+  font-size: 13px; font-weight: 700;
+  color: var(--text3); text-transform: uppercase;
+  letter-spacing: 0.8px; padding: 16px 0 8px;
+}
+.section-header:first-child { padding-top: 0; }
+
+/* ── MODAL ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 200; align-items: flex-end;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+  width: 100%; max-height: 85vh;
+  overflow-y: auto; padding: 0;
+  animation: slideUp 0.25s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.modal-handle {
+  width: 36px; height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 12px auto 0;
+}
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 18px; font-weight: 700; }
+.modal-body { padding: 20px; }
+
+/* ── SPINNER ── */
+.spinner {
+  width: 24px; height: 24px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── LOGIN ── */
+.login-screen {
+  min-height: 100vh; display: flex;
+  flex-direction: column; align-items: center;
+  justify-content: center; padding: 24px;
+  background: var(--bg);
+}
+.login-logo {
+  font-size: 48px; margin-bottom: 8px;
+}
+.login-brand {
+  font-size: 32px; font-weight: 800;
+  color: var(--primary); letter-spacing: -1px;
+  margin-bottom: 4px;
+}
+.login-tagline {
+  font-size: 15px; color: var(--text2);
+  margin-bottom: 40px; text-align: center;
+}
+.login-card {
+  width: 100%; background: var(--surface);
+  border-radius: var(--radius); border: 1px solid var(--border);
+  padding: 24px; box-shadow: var(--shadow-lg);
+}
+
+/* ── PROGRESS ── */
+.progress-steps {
+  display: flex; gap: 4px; margin-bottom: 20px;
+}
+.step-dot {
+  height: 4px; flex: 1; border-radius: 2px;
+  background: var(--border); transition: background 0.3s;
+}
+.step-dot.done { background: var(--primary); }
+
+/* ── SUCCESS ANIMATION ── */
+.success-screen {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  min-height: 60vh; gap: 16px; padding: 32px;
+}
+.success-circle {
+  width: 96px; height: 96px;
+  background: var(--success-bg);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 48px; animation: pop 0.4s ease;
+}
+@keyframes pop {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; top: 80px; left: 50%;
+  transform: translateX(-50%) translateY(-20px);
+  background: var(--text); color: var(--bg);
+  padding: 12px 20px; border-radius: 99px;
+  font-size: 14px; font-weight: 600;
+  z-index: 999; opacity: 0; pointer-events: none;
+  transition: all 0.3s; white-space: nowrap;
+  max-width: calc(100vw - 32px);
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── TAG SELECTOR ── */
+.tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag {
+  padding: 8px 16px; border-radius: 99px;
+  border: 1.5px solid var(--border);
+  background: var(--surface); color: var(--text2);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: all 0.15s;
+}
+.tag.selected { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
+
+/* ── RESPONSIVE ── */
+@media (min-width: 480px) {
+  .login-card, .content-inner { max-width: 440px; margin: 0 auto; }
+  .content { display: flex; flex-direction: column; align-items: center; }
+  .content > * { width: 100%; max-width: 440px; }
+}
+
+/* ── EMPTY STATE ── */
+.empty {
+  text-align: center; padding: 48px 24px;
+}
+.empty-icon { font-size: 56px; margin-bottom: 16px; }
+.empty-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.empty-text { font-size: 14px; color: var(--text2); line-height: 1.5; }
+
+/* ── MISC ── */
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-center { display: flex; align-items: center; gap: 8px; }
+.text-sm { font-size: 13px; }
+.text-xs { font-size: 11px; }
+.text-muted { color: var(--text2); }
+.text-danger { color: var(--danger); }
+.text-success { color: var(--success); }
+.font-mono { font-family: monospace; }
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mb-12 { margin-bottom: 12px; }
+.gap-8 { gap: 8px; }
+input[type="hidden"] { display: none; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 4px 10px; border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+  background: var(--surface2); color: var(--text2);
+}
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ════════════════════════════
+     TELA DE LOGIN
+════════════════════════════ -->
+<div id="screen-login" class="login-screen active">
+  <div class="login-logo">🚛</div>
+  <div class="login-brand">FrotaMC</div>
+  <p class="login-tagline">Controle de quilometragem e horímetro</p>
+  <div class="login-card">
+    <div class="form-group">
+      <label class="form-label">Seu nome / usuário</label>
+      <input type="text" class="form-input" id="loginUser" placeholder="Ex: João Silva" autocomplete="name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Senha</label>
+      <input type="password" class="form-input" id="loginPass" placeholder="Digite sua senha">
+      <div class="form-hint">Padrão: 1234 (colaborador) · admin (administrador)</div>
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()" style="margin-top:8px">
+      Entrar 🔐
+    </button>
+  </div>
+  <button onclick="toggleTheme()" style="margin-top:20px;background:none;border:none;cursor:pointer;color:var(--text2);font-size:14px;">
+    🌙 Alternar tema
+  </button>
+</div>
+
+<!-- ════════════════════════════
+     TELA PRINCIPAL - COLABORADOR
+════════════════════════════ -->
+<div id="screen-home" class="screen">
+  <div class="header">
+    <div>
+      <div class="header-logo">🚛 FrotaMC</div>
+      <div id="headerUser" class="text-sm text-muted"></div>
+    </div>
+    <div style="flex:1"></div>
+    <button class="btn-icon" onclick="toggleTheme()" title="Tema">🌙</button>
+    <button class="btn-icon" onclick="doLogout()" title="Sair">👤</button>
+  </div>
+  <div class="content">
+    <button class="btn btn-primary" onclick="startRegister('medicao')" style="font-size:20px;padding:22px;margin-bottom:12px;">
+      ➕ Novo Registro
+    </button>
+    <button class="btn btn-secondary" onclick="startRegister('despesa')" style="font-size:17px;padding:16px;margin-bottom:20px;">
+      💰 Nova Despesa
+    </button>
+
+    <div class="section-header">Seus registros recentes</div>
+    <div class="card" id="recentList">
+      <div class="empty">
+        <div class="empty-icon">📋</div>
+        <div class="empty-title">Nenhum registro ainda</div>
+        <p class="empty-text">Toque em "Novo Registro" para começar</p>
+      </div>
+    </div>
+  </div>
+  <nav class="bottom-nav" id="nav-home">
+    <button class="nav-item active" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
+    <button class="nav-item admin-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
+    <button class="nav-item admin-only" onclick="showScreen('operators')"><span class="nav-icon">👥</span> Operadores</button>
+    <button class="nav-item admin-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios</button>
+  </nav>
+</div>
+
+<!-- ════════════════════════════
+     NOVO REGISTRO - WIZARD
+════════════════════════════ -->
+<div id="screen-register" class="screen">
+  <div class="header">
+    <button class="btn-icon" onclick="goBack()" style="font-size:22px;">←</button>
+    <div style="flex:1">
+      <div class="header-logo" style="font-size:17px;" id="registerTitle">Novo Registro</div>
+    </div>
+    <div id="stepIndicator" class="text-sm text-muted"></div>
+  </div>
+  <div class="content" id="registerContent">
+    <!-- Steps injected by JS -->
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     VEÍCULOS
+════════════════════════════ -->
+<div id="screen-vehicles" class="screen">
+  <div class="header">
+    <div class="header-logo">🚗 Veículos</div>
+    <div style="flex:1"></div>
+    <button class="btn-icon" id="addVehicleBtn" onclick="openAddVehicle()" title="Adicionar">➕</button>
+  </div>
+  <div class="content">
+    <div id="vehicleListEl"></div>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-item" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
+    <button class="nav-item active admin-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
+    <button class="nav-item admin-only" onclick="showScreen('operators')"><span class="nav-icon">👥</span> Operadores</button>
+    <button class="nav-item admin-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios</button>
+  </nav>
+</div>
+
+<!-- ════════════════════════════
+     OPERADORES (ADMIN)
+════════════════════════════ -->
+<div id="screen-operators" class="screen">
+  <div class="header">
+    <div class="header-logo">👥 Operadores</div>
+    <div style="flex:1"></div>
+    <button class="btn-icon" onclick="openAddOperator()" title="Adicionar">➕</button>
+  </div>
+  <div class="content">
+    <div id="operatorListEl"></div>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-item" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
+    <button class="nav-item admin-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
+    <button class="nav-item active admin-only" onclick="showScreen('operators')"><span class="nav-icon">👥</span> Operadores</button>
+    <button class="nav-item admin-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios</button>
+  </nav>
+</div>
+
+<!-- ════════════════════════════
+     RELATÓRIOS / ADMIN
+════════════════════════════ -->
+<div id="screen-reports" class="screen">
+  <div class="header">
+    <div class="header-logo">📊 Relatórios</div>
+    <div style="flex:1"></div>
+    <button class="btn-icon" onclick="exportData()" title="Exportar">📤</button>
+  </div>
+  <div class="content">
+    <!-- Dashboard stats -->
+    <div class="stats-grid mb-12">
+      <div class="stat-card">
+        <div class="stat-label">🚗 Veículos</div>
+        <div class="stat-value" id="statVehicles">0</div>
+        <div class="stat-sub">cadastrados</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">📋 Hoje</div>
+        <div class="stat-value" id="statToday">0</div>
+        <div class="stat-sub">registros</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">⚠️ Sem registro</div>
+        <div class="stat-value" id="statNoReg">0</div>
+        <div class="stat-sub">veículos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">💰 Despesas</div>
+        <div class="stat-value" id="statKm" style="font-size:18px">0</div>
+        <div class="stat-sub">no período</div>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="section-header">Filtros</div>
+    <div class="card card-pad mb-12">
+      <div class="form-group">
+        <label class="form-label">Veículo</label>
+        <select class="form-input" id="filterVehicle" onchange="applyFilters()">
+          <option value="">Todos os veículos</option>
+        </select>
+      </div>
+      <div class="form-group" style="display:flex;gap:10px;">
+        <div style="flex:1">
+          <label class="form-label">De</label>
+          <input type="date" class="form-input" id="filterFrom" onchange="applyFilters()">
+        </div>
+        <div style="flex:1">
+          <label class="form-label">Até</label>
+          <input type="date" class="form-input" id="filterTo" onchange="applyFilters()">
+        </div>
+      </div>
+    </div>
+
+    <div class="section-header">Histórico de registros</div>
+    <div class="card" id="reportsList">
+      <div class="empty">
+        <div class="empty-icon">📊</div>
+        <div class="empty-title">Nenhum registro ainda</div>
+      </div>
+    </div>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-item" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
+    <button class="nav-item" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
+    <button class="nav-item admin-only" onclick="showScreen('operators')"><span class="nav-icon">👥</span> Operadores</button>
+    <button class="nav-item active" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios</button>
+  </nav>
+</div>
+
+<!-- ════════════════════════════
+     MODAL: Adicionar / Editar Veículo
+════════════════════════════ -->
+<div class="modal-overlay" id="modalVehicle">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header flex-between">
+      <div class="modal-title" id="modalVehicleTitle">Novo Veículo</div>
+      <button class="btn-icon" onclick="closeModal('modalVehicle')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="vEditId">
+      <div class="form-group">
+        <label class="form-label">Placa</label>
+        <input type="text" class="form-input font-mono" id="vPlaca" placeholder="ABC-1234" style="text-transform:uppercase">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nome do veículo</label>
+        <input type="text" class="form-input" id="vNome" placeholder="Ex: Caminhão Pipa">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo</label>
+        <div class="tag-row" id="tipoTags">
+          <span class="tag" onclick="selectTag(this,'tipo')">🚗 Carro</span>
+          <span class="tag" onclick="selectTag(this,'tipo')">🏍️ Moto</span>
+          <span class="tag" onclick="selectTag(this,'tipo')">🚛 Caminhão</span>
+          <span class="tag" onclick="selectTag(this,'tipo')">🚜 Trator</span>
+          <span class="tag" onclick="selectTag(this,'tipo')">⚡ Gerador</span>
+          <span class="tag" onclick="selectTag(this,'tipo')">🚌 Ônibus</span>
+          <span class="tag" onclick="selectTag(this,'tipo')">🏗️ Máquina</span>
+        </div>
+        <input type="hidden" id="vTipo">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Medir por</label>
+        <div class="form-hint" style="margin-bottom:8px">🚜 Tratores, geradores e máquinas normalmente usam Horímetro. Carros, motos e caminhões usam Quilometragem.</div>
+        <div class="tag-row">
+          <span class="tag selected" onclick="selectTag(this,'medicao')" id="medKm">📍 Quilometragem</span>
+          <span class="tag" onclick="selectTag(this,'medicao')" id="medHor">⏱️ Horímetro</span>
+          <span class="tag" onclick="selectTag(this,'medicao')" id="medAmb">📍⏱️ Ambos</span>
+        </div>
+        <input type="hidden" id="vMedicao" value="km">
+      </div>
+      <button class="btn btn-primary" onclick="saveVehicle()">Salvar Veículo ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     MODAL: Reajuste de Leitura
+════════════════════════════ -->
+<div class="modal-overlay" id="modalAdjust">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header flex-between">
+      <div class="modal-title">🔧 Reajustar Leitura</div>
+      <button class="btn-icon" onclick="closeModal('modalAdjust')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="adjustVehicleInfo" style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;"></div>
+      <div class="alert alert-warning" style="margin-bottom:16px">
+        <span class="alert-icon">⚠️</span>
+        <span>Use apenas para corrigir erros de digitação. O valor será atualizado como referência para novos registros.</span>
+      </div>
+      <input type="hidden" id="adjustVehicleId">
+      <div id="adjustKmGroup" class="form-group">
+        <label class="form-label">📍 Quilometragem atual</label>
+        <input type="text" class="form-input" id="adjustKm" placeholder="Ex: 45820 ou 45820,5" inputmode="decimal">
+        <div class="form-hint" id="adjustKmHint"></div>
+      </div>
+      <div id="adjustHorGroup" class="form-group">
+        <label class="form-label">⏱️ Horímetro atual (horas)</label>
+        <input type="text" class="form-input" id="adjustHor" placeholder="Ex: 3420 ou 3420,5" inputmode="decimal">
+        <div class="form-hint" id="adjustHorHint"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveAdjust()">✓ Salvar Reajuste</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     MODAL: Detalhe do Registro
+════════════════════════════ -->
+<div class="modal-overlay" id="modalDetail">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header flex-between">
+      <div class="modal-title">Detalhes do Registro</div>
+      <button class="btn-icon" onclick="closeModal('modalDetail')">✕</button>
+    </div>
+    <div class="modal-body" id="modalDetailContent"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     MODAL: Confirmar Exclusão
+════════════════════════════ -->
+<div class="modal-overlay" id="modalConfirmDelete">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">🗑️ Excluir registro?</div>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-danger" style="margin-bottom:16px">
+        <span class="alert-icon">⚠️</span>
+        <span>Esta ação <strong>não pode ser desfeita</strong>. O registro será excluído permanentemente.</span>
+      </div>
+      <div id="deleteRecordInfo" style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:20px;font-size:14px;color:var(--text2);"></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-secondary" onclick="closeModal('modalConfirmDelete')">Cancelar</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn">🗑️ Sim, excluir</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     MODAL: Cadastrar Operador
+════════════════════════════ -->
+<div class="modal-overlay" id="modalOperator">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header flex-between">
+      <div class="modal-title" id="modalOperatorTitle">Novo Operador</div>
+      <button class="btn-icon" onclick="closeModal('modalOperator')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="opEditId">
+      <div class="form-group">
+        <label class="form-label">Nome completo</label>
+        <input type="text" class="form-input" id="opNome" placeholder="Ex: João da Silva">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Usuário (login)</label>
+        <input type="text" class="form-input" id="opId" placeholder="Ex: joao.silva" autocomplete="off" style="text-transform:lowercase">
+        <div class="form-hint">Sem espaços, letras minúsculas</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Senha</label>
+        <input type="text" class="form-input" id="opPass" placeholder="Mínimo 4 caracteres" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Perfil</label>
+        <div class="tag-row">
+          <span class="tag selected" onclick="selectTag(this,'opRole')" data-val="colaborador">👷 Colaborador</span>
+          <span class="tag" onclick="selectTag(this,'opRole')" data-val="admin">🔑 Administrador</span>
+        </div>
+        <input type="hidden" id="opRole" value="colaborador">
+      </div>
+      <div class="form-group" id="opVehiclesGroup">
+        <label class="form-label">Veículos permitidos</label>
+        <div class="form-hint" style="margin-bottom:8px">Deixe todos desmarcados para liberar acesso a todos</div>
+        <div id="opVehiclesCheckboxes" class="tag-row"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveOperator()">Salvar Operador ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- INPUT DE FOTO OCULTO -->
+<input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhoto(event)">
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPA_URL = 'https://odxpsonlpznrinbuktri.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9keHBzb25scHpucmluYnVrdHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDQ0NDIsImV4cCI6MjA5NzEyMDQ0Mn0.smy-2kUMSetaaC7SITqfEZG6ZwT7g0-FkDn1i_FZKUg';
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+const DB = { vehicles: [], records: [], users: [], expenses: [] };
+let currentUser = null;
+let regState = { step:0, kind:'medicao', vehicle:null, photo:null, km:null, hor:null, valor:null, categoria:'', sig:null, obs:'', gps:null, _ocrRaw:null, _ocrSuggested:null };
+let pendingSync = [];
+let pendingSyncExpenses = [];
+
+// ── PERSISTÊNCIA LOCAL ──
+function saveLocal() {
+  try {
+    localStorage.setItem('fc_cache', JSON.stringify({ vehicles: DB.vehicles, records: DB.records, users: DB.users, expenses: DB.expenses }));
+    localStorage.setItem('fc_pending', JSON.stringify(pendingSync));
+    localStorage.setItem('fc_pending_expenses', JSON.stringify(pendingSyncExpenses));
+  } catch(e) {}
+}
+function loadLocal() {
+  try {
+    const c = localStorage.getItem('fc_cache');
+    if (c) { const d = JSON.parse(c); DB.vehicles=d.vehicles||[]; DB.records=d.records||[]; DB.users=d.users||[]; DB.expenses=d.expenses||[]; }
+    const p = localStorage.getItem('fc_pending');
+    if (p) pendingSync = JSON.parse(p);
+    const pe = localStorage.getItem('fc_pending_expenses');
+    if (pe) pendingSyncExpenses = JSON.parse(pe);
+  } catch(e) {}
+}
+
+// ── SYNC SUPABASE ──
+async function syncFromCloud() {
+  try {
+    showLoading('Sincronizando...');
+    const [{ data: vs }, { data: us }, { data: rs }, esRes] = await Promise.all([
+      supa.from('veiculos').select('*').order('criado_em'),
+      supa.from('usuarios').select('*').order('name'),
+      supa.from('registros').select('*').order('dt', { ascending: false }).limit(500),
+      supa.from('despesas').select('*').order('dt', { ascending: false }).limit(500).then(r=>r, ()=>({data:null}))
+    ]);
+    if (vs) DB.vehicles = vs.map(mapVehicle);
+    if (us) DB.users = us;
+    if (rs) DB.records = rs.map(mapRecord);
+    if (esRes && esRes.data) DB.expenses = esRes.data.map(mapExpense);
+    // Garante que registros ainda pendentes de sincronizar não desapareçam da tela
+    if (pendingSync.length) {
+      const cloudIds = new Set(DB.records.map(r => r.id));
+      pendingSync.forEach(p => { if (!cloudIds.has(p.id)) DB.records.unshift(p); });
+    }
+    if (pendingSyncExpenses.length) {
+      const cloudIds = new Set(DB.expenses.map(r => r.id));
+      pendingSyncExpenses.forEach(p => { if (!cloudIds.has(p.id)) DB.expenses.unshift(p); });
+    }
+    saveLocal(); hideLoading(); return true;
+  } catch(e) { hideLoading(); return false; }
+}
+function mapVehicle(v) {
+  return { id:v.id, placa:v.placa, nome:v.nome, tipo:v.tipo, medicao:v.medicao, lastKm:v.last_km, lastHor:v.last_hor, ativo:v.ativo };
+}
+function mapRecord(r) {
+  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, km:r.km, hor:r.hor, obs:r.obs, photo:r.photo_b64||null, gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
+}
+function mapExpense(r) {
+  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, valor:r.valor, categoria:r.categoria||null, obs:r.obs, photo:r.photo_b64||null, gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
+}
+async function syncPending() {
+  if (pendingSync.length) {
+    for (const rec of [...pendingSync]) {
+      try {
+        const { error } = await supa.from('registros').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, km:rec.km, hor:rec.hor, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto });
+        if (!error) pendingSync = pendingSync.filter(p => p.id !== rec.id);
+      } catch(e) {}
+    }
+  }
+  if (pendingSyncExpenses.length) {
+    for (const rec of [...pendingSyncExpenses]) {
+      try {
+        const { error } = await supa.from('despesas').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, valor:rec.valor, categoria:rec.categoria||null, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto });
+        if (!error) pendingSyncExpenses = pendingSyncExpenses.filter(p => p.id !== rec.id);
+      } catch(e) {}
+    }
+  }
+  saveLocal();
+  if (!pendingSync.length && !pendingSyncExpenses.length) showToast('☁️ Dados sincronizados!');
+}
+
+// ── VEÍCULOS DO OPERADOR ──
+function getVehiclesForUser(user) {
+  if (!user) return [];
+  if (user.role === 'admin') return DB.vehicles.filter(v => v.ativo);
+  // vehicle_ids: null ou [] = acesso a todos; array com itens = somente esses
+  const allowed = user.vehicle_ids;
+  if (!allowed || !allowed.length) return DB.vehicles.filter(v => v.ativo);
+  return DB.vehicles.filter(v => v.ativo && allowed.includes(v.id));
+}
+
+// ── LOADING ──
+function showLoading(msg) {
+  let el = document.getElementById('loadingOverlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'loadingOverlay';
+    el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
+    el.innerHTML = '<div class="spinner" style="width:44px;height:44px;border-width:4px"></div><div style="color:white;font-size:16px;font-weight:600;text-align:center;padding:0 32px"></div>';
+    document.body.appendChild(el);
+  }
+  el.querySelector('div + div').textContent = msg || '';
+  el.style.display = 'flex';
+}
+function hideLoading() { const el = document.getElementById('loadingOverlay'); if(el) el.style.display='none'; }
+
+// ── TEMA ──
+function toggleTheme() {
+  const d = document.documentElement;
+  d.dataset.theme = d.dataset.theme === 'dark' ? '' : 'dark';
+  localStorage.setItem('fc_theme', d.dataset.theme);
+}
+if (localStorage.getItem('fc_theme') === 'dark') document.documentElement.dataset.theme = 'dark';
+
+// ── AUTH ──
+async function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  if (!u) { showToast('Digite seu nome ou usuário'); return; }
+  showLoading('Verificando...');
+  let found = null;
+  try {
+    const { data } = await supa.from('usuarios').select('*')
+      .or(`id.eq.${u.toLowerCase()},name.ilike.%${u}%`)
+      .eq('pass', p).limit(1);
+    if (data && data.length) found = data[0];
+  } catch(e) {
+    found = DB.users.find(x => (x.id.toLowerCase()===u.toLowerCase()||x.name.toLowerCase().includes(u.toLowerCase())) && x.pass===p);
+  }
+  hideLoading();
+  if (!found) { showToast('❌ Usuário ou senha incorretos'); document.getElementById('loginPass').value=''; return; }
+  currentUser = found;
+  localStorage.setItem('fc_user', JSON.stringify(found));
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  await afterLogin(true);
+}
+async function afterLogin(scrollTop) {
+  document.getElementById('headerUser').textContent = `👤 ${currentUser.name}`;
+  document.getElementById('addVehicleBtn').style.display = currentUser.role!=='admin' ? 'none' : '';
+  document.querySelectorAll('.admin-only').forEach(el => { el.style.display = currentUser.role==='admin' ? '' : 'none'; });
+  // Envia pendentes ANTES de buscar da nuvem, para não perder registros locais
+  if (navigator.onLine) await syncPending();
+  const ok = await syncFromCloud();
+  if (!ok) { loadLocal(); showToast('📵 Modo offline — dados locais'); }
+  showScreen('home', scrollTop);
+}
+function doLogout() { currentUser=null; localStorage.removeItem('fc_user'); showScreen('login'); }
+async function checkSession() {
+  try { const s=localStorage.getItem('fc_user'); if(s){ currentUser=JSON.parse(s); await afterLogin(false); return; } } catch(e) {}
+  showScreen('login');
+}
+
+// ── TOAST ──
+let toastTimer;
+function showToast(msg, dur=2800) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ── MODAL ──
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if(e.target===o) o.classList.remove('open'); });
+});
+
+// ── NAVEGAÇÃO ──
+function showScreen(name, scrollTop) {
+  if ((name==='operators'||name==='reports') && currentUser && currentUser.role!=='admin') {
+    showToast('⛔ Apenas administradores'); return;
+  }
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const targetScreen = document.getElementById('screen-'+name);
+  // Zera o scroll ANTES de exibir a tela, para que ela já apareça no topo (sem salto visível)
+  if (scrollTop !== false) {
+    const content = targetScreen.querySelector('.content');
+    if (content) content.scrollTop = 0;
+  }
+  targetScreen.classList.add('active');
+  if (scrollTop !== false) window.scrollTo(0, 0);
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.toggle('active', (n.getAttribute('onclick')||'').includes(`'${name}'`));
+  });
+  if (name==='reports') { renderReports(); updateStats(); }
+  if (name==='vehicles') renderVehicleList();
+  if (name==='operators') renderOperatorList();
+  if (name==='home') renderHome();
+}
+function goBack() { showScreen('home'); }
+
+// ── HOME ──
+function renderHome() {
+  const el = document.getElementById('recentList');
+  const isAdmin = currentUser.role === 'admin';
+  const mineRecs = DB.records.filter(r => isAdmin || r.userId === currentUser.id).map(r=>({...r, _kind:'medicao'}));
+  const mineExp = DB.expenses.filter(r => isAdmin || r.userId === currentUser.id).map(r=>({...r, _kind:'despesa'}));
+  const mine = [...mineRecs, ...mineExp]
+    .sort((a,b) => new Date(b.dt)-new Date(a.dt))
+    .slice(0, 15);
+  if (!mine.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum registro ainda</div><p class="empty-text">Toque em "Novo Registro" para começar</p></div>`;
+    return;
+  }
+  el.innerHTML = mine.map(r => {
+    const v = DB.vehicles.find(x=>x.id===r.vehicleId);
+    const u = DB.users.find(x=>x.id===r.userId);
+    const vals = [];
+    if (r._kind==='despesa') {
+      if (r.valor!=null) vals.push(`💰 R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`);
+      if (r.categoria) vals.push(`🏷️ ${r.categoria}`);
+    } else {
+      if (r.km!=null) vals.push(`📍 ${Number(r.km).toLocaleString('pt-BR')} km`);
+      if (r.hor!=null) vals.push(`⏱️ ${Number(r.hor).toLocaleString('pt-BR')} h`);
+    }
+    const clickFn = r._kind==='despesa' ? `showExpenseDetail('${r.id}')` : `showRecordDetail('${r.id}')`;
+    const icon = r._kind==='despesa' ? '💰' : (v?getEmoji(v.tipo):'🚗');
+    return `<div class="list-item" onclick="${clickFn}">
+      <div class="list-icon">${icon}</div>
+      <div class="list-content">
+        <div class="list-title">${v?v.nome:'—'}</div>
+        <div class="list-sub">${vals.join(' · ')} ${r.obs?'· 💬':''}</div>
+        ${isAdmin ? `<div class="text-xs text-muted">👤 ${u?u.name:r.userId}</div>` : ''}
+      </div>
+      <div class="list-meta">${fmtDate(r.dt)}<br><span class="text-xs">${r.hasPhoto?'📷':''}</span></div>
+    </div>`;
+  }).join('');
+}
+
+// ── WIZARD REGISTRO ──
+function startRegister(kind) {
+  regState = { step:0, kind: kind||'medicao', vehicle:null, photo:null, km:null, hor:null, valor:null, categoria:'', obs:'', gps:null, regDate:null, _ocrRaw:null, _ocrSuggested:null };
+  // Ativa a tela manualmente sem passar por showScreen (que não conhece 'register')
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-register').classList.add('active');
+  document.getElementById('registerTitle').textContent = regState.kind==='despesa' ? 'Nova Despesa' : 'Novo Registro';
+  window.scrollTo(0, 0);
+  renderStep();
+  getGPS();
+}
+function getGPS() {
+  if (navigator.geolocation) navigator.geolocation.getCurrentPosition(pos => { regState.gps={lat:pos.coords.latitude,lng:pos.coords.longitude}; }, ()=>{});
+}
+function renderStep() {
+  const isDespesa = regState.kind === 'despesa';
+  const steps = isDespesa ? ['Veículo','Foto','Valor','Obs.','Confirmar'] : ['Veículo','Foto','Medição','Obs.','Confirmar'];
+  document.getElementById('stepIndicator').textContent = `${regState.step+1}/${steps.length}`;
+  const c = document.getElementById('registerContent');
+  const dots = steps.map((_,i)=>`<div class="step-dot ${i<=regState.step?'done':''}"></div>`).join('');
+  let html = `<div class="progress-steps">${dots}</div>`;
+  // Scroll to top on each step
+  c.scrollTop = 0;
+
+  if (regState.step===0) {
+    const myVehicles = getVehiclesForUser(currentUser);
+    html += `<div class="section-header">Selecione o veículo</div>`;
+    if (!myVehicles.length) {
+      html += `<div class="empty"><div class="empty-icon">🚗</div><div class="empty-title">Nenhum veículo disponível</div><p class="empty-text">Solicite ao administrador liberar veículos para você</p></div>`;
+    } else {
+      html += `<div class="vehicle-grid">` + myVehicles.map(v =>
+        `<div class="vehicle-card ${regState.vehicle?.id===v.id?'selected':''}" onclick="selectVehicle('${v.id}')">
+          <div class="vehicle-emoji">${getEmoji(v.tipo)}</div>
+          <div class="vehicle-name">${v.nome}</div>
+          <div class="vehicle-plate">${v.placa}</div>
+        </div>`
+      ).join('') + `</div>`;
+      html += `<div style="margin-top:20px"><button class="btn btn-primary" onclick="nextStep()" ${!regState.vehicle?'disabled style="opacity:0.4"':''}>Continuar →</button></div>`;
+    }
+
+  } else if (regState.step===1) {
+    const hasPhoto = !!regState.photo;
+    const label = isDespesa ? 'Foto da despesa' : 'Foto do painel';
+    const hint = isDespesa ? 'Enquadre bem a nota fiscal / comprovante' : 'Enquadre bem o hodômetro / horímetro';
+    const placeholderText = isDespesa ? 'Toque para adicionar foto da nota / comprovante' : 'Toque para adicionar foto do painel';
+    html += `<div class="section-header">${label}</div>
+    <div class="photo-area" onclick="triggerCamera()">
+      ${hasPhoto?`<img src="${regState.photo}" alt="foto"><div class="photo-overlay"><div style="font-size:32px">🔄</div><div style="font-size:14px;font-weight:600">Trocar foto</div></div>`:
+      `<div class="photo-icon">📷</div><div class="photo-text">${placeholderText}</div><div class="text-sm text-muted">${hint}</div>`}
+    </div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn btn-secondary" style="font-size:15px" onclick="triggerCamera()">📷 Câmera</button>
+      <button class="btn btn-secondary" style="font-size:15px" onclick="triggerGallery()">🖼️ Galeria</button>
+    </div>
+    <div class="form-hint" style="margin-top:8px">A foto é opcional. Você pode adicionar pela câmera ou escolher uma imagem já salva na galeria (inclusive uma baixada de outro celular).</div>
+    <div style="display:flex;gap:10px;margin-top:12px">
+      <button class="btn btn-secondary" onclick="prevStep()">← Voltar</button>
+      <button class="btn btn-primary" onclick="nextStep()">Continuar →</button>
+    </div>`;
+
+  } else if (regState.step===2 && !isDespesa) {
+    const v = regState.vehicle;
+    html += `<div class="section-header">Informe as leituras</div>`;
+    if (v.medicao==='km'||v.medicao==='ambos') {
+      html += `<div class="form-group">
+        <label class="form-label">📍 Quilometragem atual</label>
+        <input type="text" class="form-input" id="inputKm" value="${regState.km!=null?String(regState.km).replace('.',','):''}" placeholder="Ex: 45820 ou 45820,5" min="${v.lastKm||0}" inputmode="decimal" oninput="validateKm(this)">
+        <div class="form-hint">${v.lastKm!=null?`Último: ${Number(v.lastKm).toLocaleString('pt-BR')} km`:'Primeira leitura'}</div>
+        <div class="form-error" id="kmError">⚠️ Valor menor que o último registrado!</div>
+      </div>`;
+    }
+    if (v.medicao==='hor'||v.medicao==='ambos') {
+      html += `<div class="form-group">
+        <label class="form-label">⏱️ Horímetro atual (horas)</label>
+        <input type="text" class="form-input" id="inputHor" value="${regState.hor!=null?String(regState.hor).replace('.',','):''}" placeholder="Ex: 3420 ou 3420,5" min="${v.lastHor||0}" inputmode="decimal" oninput="validateHor(this)">
+        <div class="form-hint">${v.lastHor!=null?`Último: ${Number(v.lastHor).toLocaleString('pt-BR')} h`:'Primeira leitura'}</div>
+        <div class="form-error" id="horError">⚠️ Valor menor que o último registrado!</div>
+      </div>`;
+    }
+    if (regState._ocrSuggested) {
+      html += `<div class="alert alert-info"><span class="alert-icon">🤖</span><span>OCR detectou: <strong>${regState._ocrSuggested}</strong>. Verifique se está correto.</span></div>`;
+    }
+    html += `<div class="form-hint" style="margin-bottom:8px">As leituras são opcionais — preencha o que estiver disponível.</div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-secondary" onclick="prevStep()">← Voltar</button>
+      <button class="btn btn-primary" onclick="saveMedicao()">Continuar →</button>
+    </div>`;
+
+  } else if (regState.step===2 && isDespesa) {
+    html += `<div class="section-header">Informe o valor da despesa</div>
+    <div class="form-group">
+      <label class="form-label">💰 Valor (R$)</label>
+      <input type="text" class="form-input" id="inputValor" value="${regState.valor!=null?String(regState.valor).replace('.',','):''}" placeholder="Ex: 150,00" inputmode="decimal">
+      <div class="form-hint">Use vírgula para os centavos. Ex: 150,00</div>
+      <div class="form-error" id="valorError">⚠️ Valor inválido!</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">🏷️ Categoria (opcional)</label>
+      <div class="tag-row" id="catTags">
+        ${['Combustível','Manutenção','Pneu','Peças','Pedágio','Lavagem','Multa','Outro'].map(c=>`<span class="tag ${regState.categoria===c?'selected':''}" onclick="selectExpenseCategory(this,'${c}')">${c}</span>`).join('')}
+      </div>
+    </div>
+    <div class="form-hint" style="margin-bottom:8px">O valor e a categoria são opcionais — preencha o que estiver disponível.</div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button class="btn btn-secondary" onclick="prevStep()">← Voltar</button>
+      <button class="btn btn-primary" onclick="saveValor()">Continuar →</button>
+    </div>`;
+
+  } else if (regState.step===3) {
+    const today = nowLocalForInput();
+    const regDate = regState.regDate || today;
+    html += `<div class="section-header">Data do registro</div>
+    <div class="form-group">
+      <label class="form-label">📅 Data e hora</label>
+      <input type="datetime-local" class="form-input" id="inputRegDate" value="${regDate}" max="${today}">
+      <div class="form-hint">Para registrar em data anterior, ajuste aqui</div>
+    </div>
+    <div class="section-header">Observações (opcional)</div>
+    <div class="form-group">
+      <textarea class="form-input" id="inputObs" rows="3" placeholder="${isDespesa?'Ex: Troca de óleo, posto Shell BR-...':'Ex: Pneu calibrado, veículo em bom estado...'}" style="resize:none">${regState.obs}</textarea>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-secondary" onclick="prevStep()">← Voltar</button>
+      <button class="btn btn-primary" onclick="saveObs()">Continuar →</button>
+    </div>`;
+
+  } else if (regState.step===4 && !isDespesa) {
+    const v = regState.vehicle;
+    const vals = [];
+    if (regState.km!=null) vals.push(`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">📍 Quilometragem</td><td style="font-size:18px;font-weight:700;text-align:right">${Number(regState.km).toLocaleString('pt-BR')} km</td></tr>`);
+    if (regState.hor!=null) vals.push(`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">⏱️ Horímetro</td><td style="font-size:18px;font-weight:700;text-align:right">${Number(regState.hor).toLocaleString('pt-BR')} h</td></tr>`);
+    if (!vals.length) vals.push(`<tr><td colspan="2" class="text-muted text-sm" style="padding:8px 0;">Nenhuma leitura informada</td></tr>`);
+    let diffWarning = '';
+    if (v.lastKm && regState.km && (regState.km-v.lastKm)>1000) {
+      diffWarning=`<div class="alert alert-warning" style="margin-top:12px"><span class="alert-icon">⚠️</span><span>Diferença grande: <strong>+${(regState.km-v.lastKm).toLocaleString('pt-BR')} km</strong>. Confirme se está correto.</span></div>`;
+    }
+    html += `<div class="section-header">Confirme os dados</div>
+    <div class="card card-pad">
+      <div class="flex-between mb-12">
+        <div>
+          <div style="font-size:24px">${getEmoji(v.tipo)}</div>
+          <div style="font-size:18px;font-weight:700;margin-top:4px">${v.nome}</div>
+          <div class="font-mono text-muted">${v.placa}</div>
+        </div>
+        ${regState.photo?`<img src="${regState.photo}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`:
+        '<div style="width:80px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📷</div>'}
+      </div>
+      <div class="divider"></div>
+      <table style="width:100%">${vals.join('')}</table>
+      ${regState.obs?`<div class="divider"></div><div class="text-sm text-muted">💬 ${regState.obs}</div>`:''}
+      <div class="divider"></div>
+      <div class="text-sm text-muted">🕐 ${fmtDateTime(regState.regDate ? new Date(regState.regDate).toISOString() : new Date().toISOString())} · 👤 ${currentUser.name}</div>
+      ${regState.gps?`<div class="text-sm text-muted">📍 GPS: ${regState.gps.lat.toFixed(4)}, ${regState.gps.lng.toFixed(4)}</div>`:''}
+    </div>
+    ${diffWarning}
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-secondary" onclick="prevStep()">← Revisar</button>
+      <button class="btn btn-success" onclick="submitRecord()">✓ Confirmar</button>
+    </div>`;
+
+  } else if (regState.step===4 && isDespesa) {
+    const v = regState.vehicle;
+    const valorFmt = regState.valor!=null ? `R$ ${Number(regState.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : 'Não informado';
+    html += `<div class="section-header">Confirme os dados</div>
+    <div class="card card-pad">
+      <div class="flex-between mb-12">
+        <div>
+          <div style="font-size:24px">${getEmoji(v.tipo)}</div>
+          <div style="font-size:18px;font-weight:700;margin-top:4px">${v.nome}</div>
+          <div class="font-mono text-muted">${v.placa}</div>
+        </div>
+        ${regState.photo?`<img src="${regState.photo}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`:
+        '<div style="width:80px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📷</div>'}
+      </div>
+      <div class="divider"></div>
+      <table style="width:100%">
+        <tr><td class="text-muted" style="padding:8px 0;font-size:15px;">💰 Valor</td><td style="font-size:18px;font-weight:700;text-align:right">${valorFmt}</td></tr>
+        ${regState.categoria?`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">🏷️ Categoria</td><td style="font-size:15px;font-weight:600;text-align:right">${regState.categoria}</td></tr>`:''}
+      </table>
+      ${regState.obs?`<div class="divider"></div><div class="text-sm text-muted">💬 ${regState.obs}</div>`:''}
+      <div class="divider"></div>
+      <div class="text-sm text-muted">🕐 ${fmtDateTime(regState.regDate ? new Date(regState.regDate).toISOString() : new Date().toISOString())} · 👤 ${currentUser.name}</div>
+      ${regState.gps?`<div class="text-sm text-muted">📍 GPS: ${regState.gps.lat.toFixed(4)}, ${regState.gps.lng.toFixed(4)}</div>`:''}
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px">
+      <button class="btn btn-secondary" onclick="prevStep()">← Revisar</button>
+      <button class="btn btn-success" onclick="submitExpense()">✓ Confirmar</button>
+    </div>`;
+  }
+  c.innerHTML = html;
+}
+function nextStep() { regState.step++; renderStep(); }
+function prevStep() { regState.step--; renderStep(); }
+function selectVehicle(id) { regState.vehicle=DB.vehicles.find(v=>v.id===id); renderStep(); }
+
+// ── FOTO ──
+function triggerPhoto() { triggerCamera(); }
+function triggerCamera() {
+  let inp = document.getElementById('photoInputCamera');
+  if (!inp) { inp = document.getElementById('photoInput'); }
+  if (inp) inp.click();
+}
+function triggerGallery() {
+  let inp = document.getElementById('photoInputGallery');
+  if (!inp) { inp = document.getElementById('photoInput'); }
+  if (inp) inp.click();
+}
+function handlePhoto(e) {
+  const file = e.target.files[0]; if(!file) return;
+  // Comprimir imagem para economizar espaço no banco
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const MAX = 800;
+    let w = img.width, h = img.height;
+    if (w > MAX || h > MAX) { if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
+    const canvas = document.createElement('canvas');
+    canvas.width=w; canvas.height=h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    regState.photo = canvas.toDataURL('image/jpeg', 0.75);
+    URL.revokeObjectURL(url);
+    if (regState.step===1) renderStep();
+  };
+  img.src = url;
+  e.target.value = '';
+}
+// Converte string com vírgula ou ponto decimal para Number. Retorna NaN se inválido.
+function parseDecimal(str) {
+  if (str==null) return NaN;
+  const s = String(str).trim().replace(/\./g,'').replace(',', '.');
+  // a linha acima trata "45.820,5" (milhar com ponto) e "45820,5" (só vírgula decimal)
+  // mas se o usuário digitar só "45820.5" (ponto como decimal, sem vírgula), preservamos:
+  if (!str.includes(',') && str.includes('.')) return parseFloat(str);
+  return parseFloat(s);
+}
+function validateKm(el) {
+  const v=regState.vehicle; const val=parseDecimal(el.value); const err=document.getElementById('kmError');
+  if(v.lastKm && val<v.lastKm){el.classList.add('error');if(err)err.style.display='block';}
+  else{el.classList.remove('error');if(err)err.style.display='none';}
+}
+function validateHor(el) {
+  const v=regState.vehicle; const val=parseDecimal(el.value); const err=document.getElementById('horError');
+  if(v.lastHor && val<v.lastHor){el.classList.add('error');if(err)err.style.display='block';}
+  else{el.classList.remove('error');if(err)err.style.display='none';}
+}
+function saveMedicao() {
+  const v=regState.vehicle;
+  const kmEl=document.getElementById('inputKm'); const horEl=document.getElementById('inputHor');
+  let ok=true;
+  if((v.medicao==='km'||v.medicao==='ambos') && kmEl && kmEl.value.trim()!==''){
+    const val=parseDecimal(kmEl.value);
+    if(isNaN(val)){showToast('❌ Quilometragem inválida!');ok=false;}
+    else if(v.lastKm && val<v.lastKm){showToast('❌ Km menor que o último!');ok=false;}
+    else regState.km=val;
+  }
+  if((v.medicao==='hor'||v.medicao==='ambos') && horEl && horEl.value.trim()!==''){
+    const val=parseDecimal(horEl.value);
+    if(isNaN(val)){showToast('❌ Horímetro inválido!');ok=false;}
+    else if(v.lastHor && val<v.lastHor){showToast('❌ Horímetro menor que o último!');ok=false;}
+    else regState.hor=val;
+  }
+  if(ok) nextStep();
+}
+function selectExpenseCategory(el,cat) {
+  const already = el.classList.contains('selected');
+  el.parentElement.querySelectorAll('.tag').forEach(t=>t.classList.remove('selected'));
+  if (!already) { el.classList.add('selected'); regState.categoria = cat; }
+  else { regState.categoria = ''; }
+}
+function saveValor() {
+  const valorEl = document.getElementById('inputValor');
+  const err = document.getElementById('valorError');
+  if (valorEl && valorEl.value.trim()!=='') {
+    const val = parseDecimal(valorEl.value);
+    if (isNaN(val) || val<0) { if(err) err.style.display='block'; showToast('❌ Valor inválido!'); return; }
+    regState.valor = val;
+  } else {
+    regState.valor = null;
+  }
+  nextStep();
+}
+function saveObs() {
+  const obsEl=document.getElementById('inputObs'); if(obsEl) regState.obs=obsEl.value.trim();
+  const dateEl=document.getElementById('inputRegDate'); if(dateEl&&dateEl.value) regState.regDate=dateEl.value;
+  nextStep();
+}
+async function submitRecord() {
+  const id='r'+Date.now();
+  const recDt = regState.regDate ? new Date(regState.regDate).toISOString() : new Date().toISOString();
+  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,km:regState.km,hor:regState.hor,obs:regState.obs,photo:regState.photo,gps:regState.gps,hasPhoto:!!regState.photo};
+  DB.records.unshift(rec);
+  const v=DB.vehicles.find(x=>x.id===regState.vehicle.id);
+  if(v){if(rec.km!=null)v.lastKm=rec.km;if(rec.hor!=null)v.lastHor=rec.hor;}
+  saveLocal();
+  showLoading('Salvando na nuvem...');
+  try {
+    // Insert sem colunas opcionais que podem não existir
+    const payload = {
+      id: rec.id,
+      vehicle_id: rec.vehicleId,
+      user_id: rec.userId,
+      dt: rec.dt,
+      km: rec.km,
+      hor: rec.hor,
+      obs: rec.obs || null,
+      gps_lat: rec.gps?.lat || null,
+      gps_lng: rec.gps?.lng || null,
+      has_photo: rec.hasPhoto
+    };
+    const { error } = await supa.from('registros').insert(payload);
+    if (error) throw new Error(error.message);
+
+    // Atualiza lastKm/Hor no veículo
+    const upd={};
+    if(rec.km!=null) upd.last_km=rec.km;
+    if(rec.hor!=null) upd.last_hor=rec.hor;
+    if(Object.keys(upd).length) await supa.from('veiculos').update(upd).eq('id',rec.vehicleId);
+
+    hideLoading();
+    // Tenta salvar foto (só se a coluna existir)
+    if (rec.photo) {
+      try {
+        const tiny = await compressPhoto(rec.photo, 400, 0.5);
+        const { error: photoErr } = await supa.from('registros').update({ photo_b64: tiny }).eq('id', rec.id);
+        if (!photoErr) { DB.records[0].photo = tiny; saveLocal(); }
+      } catch(e) { /* foto fica só local, tudo bem */ }
+    }
+  } catch(e) {
+    hideLoading();
+    showToast('❌ Erro ao salvar: ' + (e.message||'tente novamente'), 5000);
+    pendingSync.push(rec); saveLocal();
+  }
+  const saved = !pendingSync.find(p=>p.id===rec.id);
+  const c=document.getElementById('registerContent');
+  c.innerHTML=`<div class="success-screen">
+    <div class="success-circle">${saved?'✅':'💾'}</div>
+    <div style="font-size:22px;font-weight:700">${saved?'Registro salvo!':'Salvo localmente'}</div>
+    <div class="text-muted" style="text-align:center">${saved?'Enviado com sucesso.':'Sem conexão — vai sincronizar automaticamente.'}<br>${fmtDateTime(rec.dt)}</div>
+    <button class="btn btn-primary" onclick="showScreen('home')" style="margin-top:16px">Voltar ao início</button>
+    <button class="btn btn-outline" onclick="startRegister()" style="margin-top:8px">Fazer outro registro</button>
+  </div>`;
+  document.getElementById('stepIndicator').textContent='';
+}
+
+async function submitExpense() {
+  const id='d'+Date.now();
+  const recDt = regState.regDate ? new Date(regState.regDate).toISOString() : new Date().toISOString();
+  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,valor:regState.valor,categoria:regState.categoria||null,obs:regState.obs,photo:regState.photo,gps:regState.gps,hasPhoto:!!regState.photo};
+  DB.expenses.unshift(rec);
+  saveLocal();
+  showLoading('Salvando na nuvem...');
+  try {
+    const payload = {
+      id: rec.id,
+      vehicle_id: rec.vehicleId,
+      user_id: rec.userId,
+      dt: rec.dt,
+      valor: rec.valor,
+      categoria: rec.categoria,
+      obs: rec.obs || null,
+      gps_lat: rec.gps?.lat || null,
+      gps_lng: rec.gps?.lng || null,
+      has_photo: rec.hasPhoto
+    };
+    const { error } = await supa.from('despesas').insert(payload);
+    if (error) throw new Error(error.message);
+    hideLoading();
+    if (rec.photo) {
+      try {
+        const tiny = await compressPhoto(rec.photo, 400, 0.5);
+        const { error: photoErr } = await supa.from('despesas').update({ photo_b64: tiny }).eq('id', rec.id);
+        if (!photoErr) { DB.expenses[0].photo = tiny; saveLocal(); }
+      } catch(e) { /* foto fica só local, tudo bem */ }
+    }
+  } catch(e) {
+    hideLoading();
+    showToast('❌ Erro ao salvar: ' + (e.message||'tente novamente'), 5000);
+    pendingSyncExpenses.push(rec); saveLocal();
+  }
+  const saved = !pendingSyncExpenses.find(p=>p.id===rec.id);
+  const c=document.getElementById('registerContent');
+  c.innerHTML=`<div class="success-screen">
+    <div class="success-circle">${saved?'✅':'💾'}</div>
+    <div style="font-size:22px;font-weight:700">${saved?'Despesa salva!':'Salvo localmente'}</div>
+    <div class="text-muted" style="text-align:center">${saved?'Enviada com sucesso.':'Sem conexão — vai sincronizar automaticamente.'}<br>${fmtDateTime(rec.dt)}</div>
+    <button class="btn btn-primary" onclick="showScreen('home')" style="margin-top:16px">Voltar ao início</button>
+    <button class="btn btn-outline" onclick="startRegister('despesa')" style="margin-top:8px">Lançar outra despesa</button>
+  </div>`;
+  document.getElementById('stepIndicator').textContent='';
+}
+
+// Comprime foto para tamanho menor
+function compressPhoto(dataUrl, maxSize, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let w=img.width, h=img.height;
+      if(w>maxSize||h>maxSize){if(w>h){h=Math.round(h*maxSize/w);w=maxSize;}else{w=Math.round(w*maxSize/h);h=maxSize;}}
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+// ── VEÍCULOS ──
+function openAddVehicle() {
+  if(currentUser.role!=='admin'){showToast('Apenas administradores');return;}
+  document.getElementById('modalVehicleTitle').textContent='Novo Veículo';
+  document.getElementById('vEditId').value='';
+  document.getElementById('vPlaca').value=''; document.getElementById('vPlaca').removeAttribute('disabled');
+  document.getElementById('vNome').value='';
+  document.getElementById('vTipo').value=''; document.getElementById('vMedicao').value='km';
+  document.querySelectorAll('#tipoTags .tag').forEach(t=>t.classList.remove('selected'));
+  document.querySelectorAll('#modalVehicle .tag[onclick*="medicao"]').forEach(t=>t.classList.toggle('selected',t.id==='medKm'));
+  openModal('modalVehicle');
+}
+function openEditVehicle(vehicleId) {
+  if(currentUser.role!=='admin'){showToast('Apenas administradores');return;}
+  const v=DB.vehicles.find(x=>x.id===vehicleId); if(!v) return;
+  document.getElementById('modalVehicleTitle').textContent='Editar Veículo';
+  document.getElementById('vEditId').value=vehicleId;
+  document.getElementById('vPlaca').value=v.placa; document.getElementById('vPlaca').setAttribute('disabled','true');
+  document.getElementById('vNome').value=v.nome;
+  document.getElementById('vTipo').value=v.tipo;
+  document.getElementById('vMedicao').value=v.medicao||'km';
+  // Selecionar tipo
+  document.querySelectorAll('#tipoTags .tag').forEach(t=>{
+    const txt=t.textContent.trim();
+    t.classList.toggle('selected', txt.includes(v.tipo));
+  });
+  // Selecionar medicao
+  const medMap={'km':'medKm','hor':'medHor','ambos':'medAmb'};
+  document.querySelectorAll('#modalVehicle .tag[onclick*="medicao"]').forEach(t=>t.classList.toggle('selected',t.id===medMap[v.medicao||'km']));
+  openModal('modalVehicle');
+}
+async function saveVehicle() {
+  const editId=document.getElementById('vEditId').value;
+  const placa=document.getElementById('vPlaca').value.trim().toUpperCase();
+  const nome=document.getElementById('vNome').value.trim();
+  const tipo=document.getElementById('vTipo').value;
+  const medicao=document.getElementById('vMedicao').value;
+  if(!placa||!nome){showToast('⚠️ Preencha placa e nome');return;}
+  if(!tipo){showToast('⚠️ Selecione o tipo');return;}
+  showLoading('Salvando...');
+  if(editId) {
+    // Edição
+    try { await supa.from('veiculos').update({nome,tipo,medicao}).eq('id',editId); } catch(e){}
+    const v=DB.vehicles.find(x=>x.id===editId);
+    if(v){v.nome=nome;v.tipo=tipo;v.medicao=medicao;}
+    hideLoading(); saveLocal(); closeModal('modalVehicle'); renderVehicleList(); showToast('✅ Veículo atualizado!');
+  } else {
+    // Novo
+    if(DB.vehicles.find(v=>v.placa===placa)){hideLoading();showToast('⚠️ Placa já cadastrada');return;}
+    const id='v'+Date.now();
+    try { await supa.from('veiculos').insert({id,placa,nome,tipo,medicao,last_km:null,last_hor:null,ativo:true}); } catch(e){}
+    hideLoading();
+    DB.vehicles.push({id,placa,nome,tipo,medicao,lastKm:null,lastHor:null,ativo:true});
+    saveLocal(); closeModal('modalVehicle'); renderVehicleList(); showToast('✅ Veículo cadastrado!');
+  }
+}
+function renderVehicleList() {
+  const el=document.getElementById('vehicleListEl'); if(!el) return;
+  if(!DB.vehicles.length){el.innerHTML=`<div class="card"><div class="empty"><div class="empty-icon">🚗</div><div class="empty-title">Nenhum veículo cadastrado</div></div></div>`;return;}
+  const isAdmin=currentUser&&currentUser.role==='admin';
+  el.innerHTML=`<div class="card">`+DB.vehicles.map(v=>{
+    const lastRec=DB.records.filter(r=>r.vehicleId===v.id).sort((a,b)=>new Date(b.dt)-new Date(a.dt))[0];
+    const lastDt=lastRec?`Último: ${fmtDate(lastRec.dt)}`:'Sem registros';
+    const recCount=DB.records.filter(r=>r.vehicleId===v.id).length;
+    const vals=[];
+    if(v.lastKm!=null)vals.push(`📍 ${Number(v.lastKm).toLocaleString('pt-BR')} km`);
+    if(v.lastHor!=null)vals.push(`⏱️ ${Number(v.lastHor).toLocaleString('pt-BR')} h`);
+    return `<div class="list-item">
+      <div class="list-icon" style="font-size:28px;background:none">${getEmoji(v.tipo)}</div>
+      <div class="list-content">
+        <div class="list-title">${v.nome}</div>
+        <div class="list-sub">${v.placa} · ${vals.join(' · ')||'Sem leituras'}</div>
+        <div class="text-xs text-muted">${lastDt} · ${recCount} registro(s)</div>
+      </div>
+      ${isAdmin?`<div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn-icon" onclick="openEditVehicle('${v.id}')" title="Editar veículo" style="font-size:16px">✏️</button>
+        <button class="btn-icon" onclick="openAdjust('${v.id}')" title="Reajustar leitura" style="font-size:16px;background:var(--warning-bg);color:var(--warning)">🔧</button>
+        <button class="btn-icon" onclick="promptDeleteVehicle('${v.id}')" title="Excluir" style="font-size:18px;background:var(--danger-bg);color:var(--danger)">🗑️</button>
+      </div>`:''}
+    </div>`;
+  }).join('')+`</div>`;
+}
+
+// ── REAJUSTE DE LEITURA (ADMIN) ──
+function openAdjust(vehicleId) {
+  const v = DB.vehicles.find(x=>x.id===vehicleId); if(!v) return;
+  document.getElementById('adjustVehicleId').value = vehicleId;
+  document.getElementById('adjustVehicleInfo').innerHTML = `<span style="font-size:28px">${getEmoji(v.tipo)}</span><div><div style="font-weight:700">${v.nome}</div><div class="font-mono text-muted text-sm">${v.placa}</div></div>`;
+
+  const showKm = v.medicao==='km'||v.medicao==='ambos';
+  const showHor = v.medicao==='hor'||v.medicao==='ambos';
+  document.getElementById('adjustKmGroup').style.display = showKm ? '' : 'none';
+  document.getElementById('adjustHorGroup').style.display = showHor ? '' : 'none';
+  document.getElementById('adjustKm').value = v.lastKm!=null ? String(v.lastKm).replace('.',',') : '';
+  document.getElementById('adjustHor').value = v.lastHor!=null ? String(v.lastHor).replace('.',',') : '';
+  document.getElementById('adjustKmHint').textContent = v.lastKm!=null ? `Valor atual: ${Number(v.lastKm).toLocaleString('pt-BR')} km` : 'Sem leitura registrada ainda';
+  document.getElementById('adjustHorHint').textContent = v.lastHor!=null ? `Valor atual: ${Number(v.lastHor).toLocaleString('pt-BR')} h` : 'Sem leitura registrada ainda';
+  openModal('modalAdjust');
+}
+async function saveAdjust() {
+  const vehicleId = document.getElementById('adjustVehicleId').value;
+  const v = DB.vehicles.find(x=>x.id===vehicleId); if(!v) return;
+  const kmEl = document.getElementById('adjustKm');
+  const horEl = document.getElementById('adjustHor');
+  const newKm = kmEl.value.trim() !== '' ? parseDecimal(kmEl.value) : null;
+  const newHor = horEl.value.trim() !== '' ? parseDecimal(horEl.value) : null;
+  if((newKm!=null && isNaN(newKm)) || (newHor!=null && isNaN(newHor))){showToast('❌ Valor inválido!');return;}
+
+  showLoading('Salvando reajuste...');
+  const upd = {};
+  if (v.medicao==='km'||v.medicao==='ambos') upd.last_km = newKm;
+  if (v.medicao==='hor'||v.medicao==='ambos') upd.last_hor = newHor;
+  try {
+    const { error } = await supa.from('veiculos').update(upd).eq('id', vehicleId);
+    if (error) throw new Error(error.message);
+  } catch(e) {
+    hideLoading();
+    showToast('❌ Erro ao salvar: ' + (e.message||'tente novamente'), 4000);
+    return;
+  }
+  if (v.medicao==='km'||v.medicao==='ambos') v.lastKm = newKm;
+  if (v.medicao==='hor'||v.medicao==='ambos') v.lastHor = newHor;
+  saveLocal();
+  hideLoading();
+  closeModal('modalAdjust');
+  renderVehicleList();
+  showToast('✅ Leitura reajustada!');
+}
+function promptDeleteVehicle(vehicleId) {
+  const v=DB.vehicles.find(x=>x.id===vehicleId);if(!v)return;
+  const recCount=DB.records.filter(r=>r.vehicleId===vehicleId).length;
+  document.getElementById('deleteRecordInfo').innerHTML=`<strong>${getEmoji(v.tipo)} ${v.nome}</strong> <span class="font-mono">(${v.placa})</span><br><span style="color:var(--text3)">${recCount} registro(s) — não serão excluídos</span>`;
+  document.getElementById('confirmDeleteBtn').onclick=()=>confirmDeleteVehicle(vehicleId);
+  openModal('modalConfirmDelete');
+}
+async function confirmDeleteVehicle(vehicleId) {
+  showLoading('Excluindo...');
+  try{await supa.from('veiculos').delete().eq('id',vehicleId);}catch(e){}
+  hideLoading();
+  DB.vehicles=DB.vehicles.filter(x=>x.id!==vehicleId);
+  saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Veículo excluído'); renderVehicleList(); updateStats();
+}
+
+// ── RELATÓRIOS ──
+function updateStats() {
+  const today=new Date().toDateString();
+  document.getElementById('statVehicles').textContent=DB.vehicles.length;
+  document.getElementById('statToday').textContent=DB.records.filter(r=>new Date(r.dt).toDateString()===today).length;
+  const withRec=new Set(DB.records.map(r=>r.vehicleId));
+  document.getElementById('statNoReg').textContent=DB.vehicles.filter(v=>!withRec.has(v.id)).length;
+  document.getElementById('statKm').textContent=0;
+  const sel=document.getElementById('filterVehicle');
+  sel.innerHTML='<option value="">Todos os veículos</option>'+DB.vehicles.map(v=>`<option value="${v.id}">${v.nome} (${v.placa})</option>`).join('');
+  const to=new Date(); const from=new Date(); from.setDate(from.getDate()-30);
+  if(!document.getElementById('filterFrom').value){
+    document.getElementById('filterFrom').value=from.toISOString().slice(0,10);
+    document.getElementById('filterTo').value=to.toISOString().slice(0,10);
+  }
+  applyFilters();
+}
+function applyFilters() {
+  const vId=document.getElementById('filterVehicle').value;
+  const from=document.getElementById('filterFrom').value;
+  const to=document.getElementById('filterTo').value;
+  let recs=DB.records.map(r=>({...r,_kind:'medicao'}));
+  let exps=DB.expenses.map(r=>({...r,_kind:'despesa'}));
+  let all=[...recs,...exps];
+  if(vId)all=all.filter(r=>r.vehicleId===vId);
+  if(from)all=all.filter(r=>r.dt.slice(0,10)>=from);
+  if(to)all=all.filter(r=>r.dt.slice(0,10)<=to);
+  all.sort((a,b)=>new Date(b.dt)-new Date(a.dt));
+  const totalDespesas = all.filter(r=>r._kind==='despesa').reduce((s,r)=>s+(r.valor||0),0);
+  const statKmEl = document.getElementById('statKm');
+  if (statKmEl) { statKmEl.textContent = `R$ ${totalDespesas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`; }
+  renderReportsList(all);
+}
+function renderReports(){updateStats();}
+function renderReportsList(recs) {
+  const el=document.getElementById('reportsList');
+  if(!recs.length){el.innerHTML=`<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">Nenhum registro no período</div></div>`;return;}
+  el.innerHTML=recs.map(r=>{
+    const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+    const u=DB.users.find(x=>x.id===r.userId);
+    const vals=[];
+    if(r._kind==='despesa'){
+      if(r.valor!=null)vals.push(`💰 R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`);
+      if(r.categoria)vals.push(`🏷️ ${r.categoria}`);
+    } else {
+      if(r.km!=null)vals.push(`📍 ${Number(r.km).toLocaleString('pt-BR')} km`);
+      if(r.hor!=null)vals.push(`⏱️ ${Number(r.hor).toLocaleString('pt-BR')} h`);
+    }
+    const clickFn = r._kind==='despesa' ? `showExpenseDetail('${r.id}')` : `showRecordDetail('${r.id}')`;
+    const icon = r._kind==='despesa' ? '💰' : (v?getEmoji(v.tipo):'🚗');
+    return `<div class="list-item" onclick="${clickFn}">
+      <div class="list-icon">${icon}</div>
+      <div class="list-content">
+        <div class="list-title">${v?v.nome:'—'}</div>
+        <div class="list-sub">${vals.join(' · ')}</div>
+        <div class="text-xs text-muted">👤 ${u?u.name:r.userId}</div>
+      </div>
+      <div class="list-meta text-right">${fmtDate(r.dt)}<br><span class="text-xs">${r.hasPhoto?'📷':''}${r.gps?'📍':''}</span></div>
+    </div>`;
+  }).join('');
+}
+function showRecordDetail(id) {
+  const r=DB.records.find(x=>x.id===id);if(!r)return;
+  const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+  const u=DB.users.find(x=>x.id===r.userId);
+  const vals=[];
+  if(r.km!=null)vals.push(`<tr><td class="text-muted" style="padding:6px 0;">📍 Quilometragem</td><td style="font-weight:700;text-align:right">${Number(r.km).toLocaleString('pt-BR')} km</td></tr>`);
+  if(r.hor!=null)vals.push(`<tr><td class="text-muted" style="padding:6px 0;">⏱️ Horímetro</td><td style="font-weight:700;text-align:right">${Number(r.hor).toLocaleString('pt-BR')} h</td></tr>`);
+  const canDelete=currentUser.role==='admin'||r.userId===currentUser.id;
+  document.getElementById('modalDetailContent').innerHTML=`
+    <div class="flex-center mb-12">
+      <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
+      <div><div style="font-size:18px;font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted">${v?v.placa:''}</div></div>
+    </div>
+    ${r.photo?`<img src="${r.photo}" style="width:100%;border-radius:12px;margin-bottom:8px;object-fit:cover;max-height:220px;cursor:pointer" onclick="openFullPhoto(this.src)">
+    <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:12px" onclick="downloadPhoto('${r.photo}','${v?v.placa.replace(/\s+/g,''):'foto'}_${r.dt.slice(0,10)}')">⬇️ Baixar foto</button>`:'<div style="background:var(--surface2);border-radius:12px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:14px;color:var(--text3)">📷 Sem foto registrada</div>'}
+    <table style="width:100%;margin-bottom:12px">${vals.join('')}</table>
+    <div class="divider"></div>
+    <div class="text-sm text-muted" style="margin-bottom:6px">🕐 ${fmtDateTime(r.dt)}</div>
+    <div class="text-sm text-muted" style="margin-bottom:6px">👤 ${u?u.name:r.userId}</div>
+    ${r.gps?`<div class="text-sm text-muted" style="margin-bottom:6px">📍 ${r.gps.lat.toFixed(5)}, ${r.gps.lng.toFixed(5)}</div>`:''}
+    ${r.obs?`<div class="alert alert-info" style="margin-top:12px"><span class="alert-icon">💬</span><span>${r.obs}</span></div>`:''}
+    ${canDelete?`<div class="divider"></div><button class="btn btn-danger" style="margin-top:4px" onclick="promptDeleteRecord('${r.id}')">🗑️ Excluir este registro</button>`:''}
+  `;
+  openModal('modalDetail');
+}
+function downloadPhoto(dataUrl, filename) {
+  const a = document.createElement('a');
+  a.href = dataUrl;
+  a.download = `${filename}.jpg`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast('⬇️ Foto salva!');
+}
+function openFullPhoto(src) {
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:16px;';
+  overlay.innerHTML=`<img src="${src}" style="max-width:100%;max-height:75vh;border-radius:12px;object-fit:contain">
+    <button style="background:var(--primary);border:none;color:white;font-size:15px;font-weight:600;padding:12px 24px;border-radius:99px;cursor:pointer;display:flex;align-items:center;gap:8px" onclick="downloadPhoto('${src}','foto_${Date.now()}')">⬇️ Baixar foto</button>
+    <button style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.2);border:none;color:white;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer" onclick="this.parentElement.remove()">✕</button>`;
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+function promptDeleteRecord(id) {
+  const r=DB.records.find(x=>x.id===id);if(!r)return;
+  const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+  const vals=[];
+  if(r.km!=null)vals.push(`📍 ${Number(r.km).toLocaleString('pt-BR')} km`);
+  if(r.hor!=null)vals.push(`⏱️ ${Number(r.hor).toLocaleString('pt-BR')} h`);
+  document.getElementById('deleteRecordInfo').innerHTML=`<strong>${v?v.nome:'—'}</strong> · ${vals.join(' · ')}<br><span style="color:var(--text3)">${fmtDateTime(r.dt)}</span>`;
+  document.getElementById('confirmDeleteBtn').onclick=()=>confirmDeleteRecord(id);
+  closeModal('modalDetail'); openModal('modalConfirmDelete');
+}
+async function confirmDeleteRecord(id) {
+  showLoading('Excluindo...');
+  try{await supa.from('registros').delete().eq('id',id);}catch(e){}
+  hideLoading();
+  DB.records=DB.records.filter(x=>x.id!==id);
+  saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Registro excluído');
+  renderHome();
+  if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+}
+function showExpenseDetail(id) {
+  const r=DB.expenses.find(x=>x.id===id);if(!r)return;
+  const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+  const u=DB.users.find(x=>x.id===r.userId);
+  const canDelete=currentUser.role==='admin'||r.userId===currentUser.id;
+  document.getElementById('modalDetailContent').innerHTML=`
+    <div class="flex-center mb-12">
+      <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
+      <div><div style="font-size:18px;font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted">${v?v.placa:''}</div></div>
+    </div>
+    ${r.photo?`<img src="${r.photo}" style="width:100%;border-radius:12px;margin-bottom:8px;object-fit:cover;max-height:220px;cursor:pointer" onclick="openFullPhoto(this.src)">
+    <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:12px" onclick="downloadPhoto('${r.photo}','despesa_${v?v.placa.replace(/\s+/g,''):''}_${r.dt.slice(0,10)}')">⬇️ Baixar foto</button>`:'<div style="background:var(--surface2);border-radius:12px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:14px;color:var(--text3)">📷 Sem foto registrada</div>'}
+    <table style="width:100%;margin-bottom:12px">
+      <tr><td class="text-muted" style="padding:6px 0;">💰 Valor</td><td style="font-weight:700;text-align:right">${r.valor!=null?`R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`:'Não informado'}</td></tr>
+      ${r.categoria?`<tr><td class="text-muted" style="padding:6px 0;">🏷️ Categoria</td><td style="font-weight:700;text-align:right">${r.categoria}</td></tr>`:''}
+    </table>
+    <div class="divider"></div>
+    <div class="text-sm text-muted" style="margin-bottom:6px">🕐 ${fmtDateTime(r.dt)}</div>
+    <div class="text-sm text-muted" style="margin-bottom:6px">👤 ${u?u.name:r.userId}</div>
+    ${r.gps?`<div class="text-sm text-muted" style="margin-bottom:6px">📍 ${r.gps.lat.toFixed(5)}, ${r.gps.lng.toFixed(5)}</div>`:''}
+    ${r.obs?`<div class="alert alert-info" style="margin-top:12px"><span class="alert-icon">💬</span><span>${r.obs}</span></div>`:''}
+    ${canDelete?`<div class="divider"></div><button class="btn btn-danger" style="margin-top:4px" onclick="promptDeleteExpense('${r.id}')">🗑️ Excluir esta despesa</button>`:''}
+  `;
+  openModal('modalDetail');
+}
+function promptDeleteExpense(id) {
+  const r=DB.expenses.find(x=>x.id===id);if(!r)return;
+  const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+  const valorTxt = r.valor!=null?`R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`:'sem valor';
+  document.getElementById('deleteRecordInfo').innerHTML=`<strong>${v?v.nome:'—'}</strong> · 💰 ${valorTxt}<br><span style="color:var(--text3)">${fmtDateTime(r.dt)}</span>`;
+  document.getElementById('confirmDeleteBtn').onclick=()=>confirmDeleteExpense(id);
+  closeModal('modalDetail'); openModal('modalConfirmDelete');
+}
+async function confirmDeleteExpense(id) {
+  showLoading('Excluindo...');
+  try{await supa.from('despesas').delete().eq('id',id);}catch(e){}
+  hideLoading();
+  DB.expenses=DB.expenses.filter(x=>x.id!==id);
+  saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Despesa excluída');
+  renderHome();
+  if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+}
+
+// ── OPERADORES ──
+function renderVehicleCheckboxes(selectedIds) {
+  const el=document.getElementById('opVehiclesCheckboxes');
+  if(!el) return;
+  if(!DB.vehicles.length){el.innerHTML='<span class="text-sm text-muted">Nenhum veículo cadastrado ainda</span>';return;}
+  el.innerHTML=DB.vehicles.map(v=>{
+    const checked=selectedIds&&selectedIds.includes(v.id);
+    return `<label style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-sm);cursor:pointer;border:1.5px solid ${checked?'var(--primary)':'var(--border)'};flex:1;min-width:140px" onclick="toggleVehicleCheck(this,'${v.id}')">
+      <span style="font-size:20px">${getEmoji(v.tipo)}</span>
+      <span style="font-size:13px;font-weight:600;flex:1">${v.nome}<br><span class="font-mono" style="font-size:11px;color:var(--text3)">${v.placa}</span></span>
+      <span id="vcheck_${v.id}" style="font-size:20px">${checked?'✅':'⬜'}</span>
+    </label>`;
+  }).join('');
+}
+function toggleVehicleCheck(label, vehicleId) {
+  const icon=document.getElementById('vcheck_'+vehicleId);
+  const isChecked=icon.textContent==='✅';
+  icon.textContent=isChecked?'⬜':'✅';
+  label.style.borderColor=isChecked?'var(--border)':'var(--primary)';
+}
+function getSelectedVehicleIds() {
+  return DB.vehicles.filter(v=>{ const el=document.getElementById('vcheck_'+v.id); return el&&el.textContent==='✅'; }).map(v=>v.id);
+}
+function openAddOperator() {
+  document.getElementById('modalOperatorTitle').textContent='Novo Operador';
+  document.getElementById('opEditId').value='';
+  document.getElementById('opNome').value='';
+  document.getElementById('opId').value='';
+  document.getElementById('opId').removeAttribute('disabled');
+  document.getElementById('opPass').value='';
+  document.getElementById('opRole').value='colaborador';
+  document.querySelectorAll('#modalOperator .tag').forEach(t=>t.classList.toggle('selected',t.dataset.val==='colaborador'));
+  renderVehicleCheckboxes([]);
+  openModal('modalOperator');
+}
+function openEditOperator(userId) {
+  const u=DB.users.find(x=>x.id===userId);if(!u)return;
+  document.getElementById('modalOperatorTitle').textContent='Editar Operador';
+  document.getElementById('opEditId').value=u.id;
+  document.getElementById('opNome').value=u.name;
+  document.getElementById('opId').value=u.id;
+  document.getElementById('opId').setAttribute('disabled','true');
+  document.getElementById('opPass').value=u.pass;
+  document.getElementById('opRole').value=u.role;
+  document.querySelectorAll('#modalOperator .tag').forEach(t=>t.classList.toggle('selected',t.dataset.val===u.role));
+  renderVehicleCheckboxes(u.vehicle_ids||[]);
+  openModal('modalOperator');
+}
+async function saveOperator() {
+  const editId=document.getElementById('opEditId').value;
+  const nome=document.getElementById('opNome').value.trim();
+  const id=document.getElementById('opId').value.trim().toLowerCase().replace(/\s+/g,'.');
+  const pass=document.getElementById('opPass').value.trim();
+  const role=document.getElementById('opRole').value;
+  const vehicleIds=getSelectedVehicleIds();
+  if(!nome){showToast('⚠️ Informe o nome');return;}
+  if(!id){showToast('⚠️ Informe o usuário');return;}
+  if(!pass||pass.length<4){showToast('⚠️ Senha mínimo 4 caracteres');return;}
+  showLoading('Salvando...');
+
+  // Salva vehicle_ids como texto JSON no campo 'pass' não, num campo separado
+  // Guarda no objeto local e tenta salvar na nuvem
+  const vIds = vehicleIds.length ? vehicleIds : null;
+
+  if(editId){
+    // Tenta update com vehicle_ids; se falhar (coluna não existe), salva sem
+    let saved = false;
+    try {
+      const {error} = await supa.from('usuarios').update({name:nome,pass,role,vehicle_ids:vIds}).eq('id',editId);
+      if(!error) saved=true;
+    } catch(e){}
+    if(!saved) {
+      try { await supa.from('usuarios').update({name:nome,pass,role}).eq('id',editId); } catch(e){}
+    }
+    const u=DB.users.find(x=>x.id===editId);
+    if(u){u.name=nome;u.pass=pass;u.role=role;u.vehicle_ids=vIds;}
+  } else {
+    if(DB.users.find(x=>x.id===id)){hideLoading();showToast('⚠️ Usuário já existe');return;}
+    let saved=false;
+    try {
+      const {error}=await supa.from('usuarios').insert({id,name:nome,pass,role,vehicle_ids:vIds});
+      if(!error) saved=true;
+    } catch(e){}
+    if(!saved) {
+      try { await supa.from('usuarios').insert({id,name:nome,pass,role}); } catch(e){}
+    }
+    DB.users.push({id,name:nome,pass,role,vehicle_ids:vIds});
+  }
+  // Salva vehicle_ids no localStorage mesmo se a nuvem não suportar
+  saveLocal();
+  hideLoading(); closeModal('modalOperator'); renderOperatorList();
+  showToast(editId?'✅ Operador atualizado!':'✅ Operador cadastrado!');
+}
+function promptDeleteOperator(userId) {
+  if(userId===currentUser.id){showToast('⛔ Não pode excluir seu próprio usuário');return;}
+  const u=DB.users.find(x=>x.id===userId);if(!u)return;
+  const recCount=DB.records.filter(r=>r.userId===userId).length;
+  document.getElementById('deleteRecordInfo').innerHTML=`<strong>${u.name}</strong> (${u.id})<br><span style="color:var(--text3)">${recCount} registro(s) — não serão excluídos</span>`;
+  document.getElementById('confirmDeleteBtn').onclick=()=>confirmDeleteOperator(userId);
+  openModal('modalConfirmDelete');
+}
+async function confirmDeleteOperator(userId) {
+  showLoading('Excluindo...');
+  try{await supa.from('usuarios').delete().eq('id',userId);}catch(e){}
+  hideLoading();
+  DB.users=DB.users.filter(x=>x.id!==userId);
+  saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Operador excluído'); renderOperatorList();
+}
+function renderOperatorList() {
+  const el=document.getElementById('operatorListEl');if(!el)return;
+  if(!DB.users.length){el.innerHTML=`<div class="card"><div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Nenhum operador</div></div></div>`;return;}
+  el.innerHTML=`<div class="card">`+DB.users.map(u=>{
+    const recCount=DB.records.filter(r=>r.userId===u.id).length;
+    const roleLabel=u.role==='admin'?`<span class="badge-pill badge-info">🔑 Admin</span>`:`<span class="badge-pill badge-ok">👷 Colaborador</span>`;
+    const vIds=u.vehicle_ids;
+    const vLabel=(!vIds||!vIds.length)
+      ?`<span class="text-xs text-muted">🚗 Todos os veículos</span>`
+      :`<span class="text-xs text-muted">🚗 ${vIds.length} veículo(s)</span>`;
+    return `<div class="list-item">
+      <div class="list-icon" style="font-size:24px;background:var(--primary-light)">${u.role==='admin'?'🔑':'👤'}</div>
+      <div class="list-content">
+        <div class="list-title">${u.name}</div>
+        <div class="list-sub">${u.id} · ${recCount} registro(s)</div>
+        <div style="margin-top:4px;display:flex;gap:6px;align-items:center">${roleLabel}${vLabel}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <button class="btn-icon" onclick="openEditOperator('${u.id}')" style="font-size:16px">✏️</button>
+        ${u.id!==currentUser.id?`<button class="btn-icon" onclick="promptDeleteOperator('${u.id}')" style="font-size:16px;background:var(--danger-bg);color:var(--danger)">🗑️</button>`:''}
+      </div>
+    </div>`;
+  }).join('')+`</div>`;
+}
+
+// ── TAG SELECTOR ──
+function selectTag(el,group) {
+  el.parentElement.querySelectorAll('.tag').forEach(t=>t.classList.remove('selected'));
+  el.classList.add('selected');
+  if(group==='tipo'){
+    const tipo = el.textContent.trim();
+    document.getElementById('vTipo').value=tipo;
+    // Sugere automaticamente o tipo de medição mais comum para o tipo de veículo (usuário pode trocar depois)
+    const editId = document.getElementById('vEditId').value;
+    if(!editId){
+      const horDefault = ['Trator','Gerador','Máquina'];
+      const isHor = horDefault.some(h=>tipo.includes(h));
+      document.getElementById('vMedicao').value = isHor ? 'hor' : 'km';
+      document.querySelectorAll('#modalVehicle .tag[onclick*="medicao"]').forEach(t=>t.classList.toggle('selected', t.id===(isHor?'medHor':'medKm')));
+    }
+  }
+  if(group==='medicao'){const map={'📍 Quilometragem':'km','⏱️ Horímetro':'hor','📍⏱️ Ambos':'ambos'};document.getElementById('vMedicao').value=map[el.textContent.trim()]||'km';}
+  if(group==='opRole')document.getElementById('opRole').value=el.dataset.val||'colaborador';
+}
+
+// ── EXPORT CSV ──
+function exportData() {
+  const all=[];
+  DB.records.forEach(r=>{
+    const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+    const u=DB.users.find(x=>x.id===r.userId);
+    all.push({dt:r.dt, row:['Medição',fmtDateTime(r.dt),v?v.nome:'',v?v.placa:'',r.km!=null?String(r.km).replace('.',','):'',r.hor!=null?String(r.hor).replace('.',','):'','','',u?u.name:r.userId,r.obs||'',r.gps?`${r.gps.lat.toFixed(5)},${r.gps.lng.toFixed(5)}`:'']});
+  });
+  DB.expenses.forEach(r=>{
+    const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+    const u=DB.users.find(x=>x.id===r.userId);
+    all.push({dt:r.dt, row:['Despesa',fmtDateTime(r.dt),v?v.nome:'',v?v.placa:'','','',r.valor!=null?String(r.valor).replace('.',','):'',r.categoria||'',u?u.name:r.userId,r.obs||'',r.gps?`${r.gps.lat.toFixed(5)},${r.gps.lng.toFixed(5)}`:'']});
+  });
+  all.sort((a,b)=>new Date(b.dt)-new Date(a.dt));
+  const rows=[['Tipo','Data','Veículo','Placa','Km','Horímetro','Valor','Categoria','Colaborador','Obs','GPS'], ...all.map(x=>x.row)];
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`frotamc_relatorio_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);
+  showToast('✅ Exportado com sucesso!');
+}
+
+// ── UTILS ──
+function getEmoji(tipo) {
+  const map={'Carro':'🚗','Moto':'🏍️','Caminhão':'🚛','Trator':'🚜','Gerador':'⚡','Ônibus':'🚌','Máquina':'🏗️'};
+  if(!tipo)return '🚗';
+  for(const k in map){if(tipo.includes(k))return map[k];}
+  return '🚗';
+}
+function fmtDate(iso){if(!iso)return '';return new Date(iso).toLocaleDateString('pt-BR');}
+function fmtDateTime(iso){if(!iso)return '';const d=new Date(iso);return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});}
+// Gera o valor "YYYY-MM-DDTHH:mm" no horário LOCAL do dispositivo (datetime-local não usa UTC)
+function nowLocalForInput(d){
+  d = d || new Date();
+  const off = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - off*60000);
+  return local.toISOString().slice(0,16);
+}
+
+// ── OFFLINE ──
+window.addEventListener('online',async()=>{showToast('📶 Conexão restaurada — sincronizando...');await syncPending();await syncFromCloud();renderHome();});
+window.addEventListener('offline',()=>showToast('📵 Sem internet — modo offline ativado'));
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded',()=>{
+  loadLocal();
+  document.getElementById('loginPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  checkSession();
+});
+</script>
+</body>
+</html>

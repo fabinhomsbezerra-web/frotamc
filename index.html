@@ -59,7 +59,7 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
-body { overflow: hidden; position: fixed; width: 100%; }
+body { overflow: hidden; }
 
 .screen { display: none; height: 100vh; height: 100dvh; flex-direction: column; overflow: hidden; }
 .screen.active { display: flex; }
@@ -431,10 +431,21 @@ select.form-input { cursor: pointer; }
 .tag.selected { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
 
 /* ── RESPONSIVE ── */
+/* Em telas pequenas (celular), o app ocupa 100% da largura normalmente. */
+/* A partir de 480px (tablets/desktop), centraliza o "cartão" do app numa largura confortável, */
+/* sem travar a largura útil do conteúdo numa coluna estreita demais. */
 @media (min-width: 480px) {
-  .login-card, .content-inner { max-width: 440px; margin: 0 auto; }
-  .content { display: flex; flex-direction: column; align-items: center; }
-  .content > * { width: 100%; max-width: 440px; }
+  body { background: var(--surface2); }
+  .screen, .login-screen {
+    max-width: 520px;
+    margin: 0 auto;
+    box-shadow: 0 0 40px rgba(0,0,0,0.08);
+  }
+  .screen .bottom-nav {
+    max-width: 520px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 
 /* ── EMPTY STATE ── */

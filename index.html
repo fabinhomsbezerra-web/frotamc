@@ -929,7 +929,9 @@ async function syncFromCloud() {
       const cloudIds = new Set(DB.expenses.map(r => r.id));
       pendingSyncExpenses.forEach(p => { if (!cloudIds.has(p.id)) DB.expenses.unshift(p); });
     }
-    saveLocal(); hideLoading(); return true;
+    saveLocal(); hideLoading();
+    refreshCurrentScreen();
+    return true;
   } catch(e) { hideLoading(); return false; }
 }
 function mapVehicle(v) {
@@ -1022,17 +1024,21 @@ async function afterLogin(scrollTop) {
   document.getElementById('headerUser').textContent = `👤 ${currentUser.name}`;
   document.getElementById('addVehicleBtn').style.display = currentUser.role!=='admin' ? 'none' : '';
   document.querySelectorAll('.admin-only').forEach(el => { el.style.display = currentUser.role==='admin' ? '' : 'none'; });
-  // Mostra a Home imediatamente: o usuário não deve ficar esperando a sincronização para ver o app
+  // Mostra a Home imediatamente com dados locais (se houver), sem esperar a nuvem
   showScreen('home', scrollTop);
   try {
-    // Envia pendentes ANTES de buscar da nuvem, para não perder registros locais
     if (navigator.onLine) await syncPending();
     const ok = await syncFromCloud();
-    if (!ok) { loadLocal(); showToast('📵 Modo offline — dados locais'); }
+    if (!ok) {
+      loadLocal();
+      showToast('📵 Modo offline — dados locais');
+    }
   } catch(e) {
     loadLocal();
     showToast('📵 Modo offline — dados locais');
   }
+  // Atualiza a tela com os dados que chegaram da nuvem (ou do localStorage no modo offline)
+  refreshCurrentScreen();
 }
 function confirmLogout() { openModal('modalLogout'); }
 function doLogout() {
@@ -1089,6 +1095,17 @@ function showScreen(name, scrollTop) {
   if (name==='operators') renderOperatorList();
   if (name==='home') renderHome();
 }
+function refreshCurrentScreen() {
+  if (!currentUser) return;
+  const active = document.querySelector('.screen.active');
+  if (!active) return;
+  const id = active.id;
+  if (id === 'screen-home')      { renderHome(); }
+  if (id === 'screen-reports')   { renderReports(); updateStats(); }
+  if (id === 'screen-vehicles')  { renderVehicleList(); }
+  if (id === 'screen-operators') { renderOperatorList(); }
+}
+
 function goBack() { showScreen('home'); }
 
 // ── HOME ──
@@ -1802,8 +1819,7 @@ async function confirmDeleteRecord(id) {
   hideLoading();
   DB.records=DB.records.filter(x=>x.id!==id);
   saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Registro excluído');
-  renderHome();
-  if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+  refreshCurrentScreen();
 }
 function showExpenseDetail(id) {
   const r=DB.expenses.find(x=>x.id===id);if(!r)return;
@@ -1846,8 +1862,7 @@ async function confirmDeleteExpense(id) {
   hideLoading();
   DB.expenses=DB.expenses.filter(x=>x.id!==id);
   saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Despesa excluída');
-  renderHome();
-  if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+  refreshCurrentScreen();
 }
 
 // ── EDIÇÃO DE LANÇAMENTOS (apenas admin) ──
@@ -1918,8 +1933,7 @@ async function saveEditRecord() {
     }
     saveLocal(); hideLoading(); closeModal('modalEditRecord');
     showToast('✅ Registro atualizado!');
-    renderHome();
-    if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+    refreshCurrentScreen();
   } catch(e) {
     hideLoading();
     showToast('❌ Erro ao salvar: '+(e.message||'tente novamente'), 5000);
@@ -1986,8 +2000,7 @@ async function saveEditExpense() {
     r.valor=newValor; r.categoria=newCat; r.dt=newDt; r.obs=newObs;
     saveLocal(); hideLoading(); closeModal('modalEditRecord');
     showToast('✅ Despesa atualizada!');
-    renderHome();
-    if(document.getElementById('screen-reports').classList.contains('active')){renderReports();updateStats();}
+    refreshCurrentScreen();
   } catch(e) {
     hideLoading();
     showToast('❌ Erro ao salvar: '+(e.message||'tente novamente'), 5000);
@@ -2187,7 +2200,12 @@ function nowLocalForInput(d){
 }
 
 // ── OFFLINE ──
-window.addEventListener('online',async()=>{showToast('📶 Conexão restaurada — sincronizando...');await syncPending();await syncFromCloud();renderHome();});
+window.addEventListener('online', async () => {
+  showToast('📶 Conexão restaurada — sincronizando...');
+  await syncPending();
+  await syncFromCloud();
+  // syncFromCloud já chama refreshCurrentScreen internamente
+});
 window.addEventListener('offline',()=>showToast('📵 Sem internet — modo offline ativado'));
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 

@@ -908,19 +908,21 @@ function loadLocal() {
 
 // ── SYNC SUPABASE ──
 async function syncFromCloud() {
+  showLoading('Sincronizando...');
+  let anyOk = false;
   try {
-    showLoading('Sincronizando...');
-    const [{ data: vs }, { data: us }, { data: rs }, esRes] = await Promise.all([
+    // Cada query é independente — falha em uma não cancela as outras
+    const [vsRes, usRes, rsRes, esRes] = await Promise.allSettled([
       supa.from('veiculos').select('*').order('criado_em'),
       supa.from('usuarios').select('*').order('name'),
       supa.from('registros').select('*').order('dt', { ascending: false }).limit(500),
-      supa.from('despesas').select('*').order('dt', { ascending: false }).limit(500).then(r=>r, ()=>({data:null}))
+      supa.from('despesas').select('*').order('dt', { ascending: false }).limit(500)
     ]);
-    if (vs) DB.vehicles = vs.map(mapVehicle);
-    if (us) DB.users = us;
-    if (rs) DB.records = rs.map(mapRecord);
-    if (esRes && esRes.data) DB.expenses = esRes.data.map(mapExpense);
-    // Garante que registros ainda pendentes de sincronizar não desapareçam da tela
+    if (vsRes.status==='fulfilled' && vsRes.value.data) { DB.vehicles = vsRes.value.data.map(mapVehicle); anyOk=true; }
+    if (usRes.status==='fulfilled' && usRes.value.data) { DB.users = usRes.value.data; anyOk=true; }
+    if (rsRes.status==='fulfilled' && rsRes.value.data) { DB.records = rsRes.value.data.map(mapRecord); anyOk=true; }
+    if (esRes.status==='fulfilled' && esRes.value.data) { DB.expenses = esRes.value.data.map(mapExpense); anyOk=true; }
+    // Reintegra pendentes locais que ainda não foram para nuvem
     if (pendingSync.length) {
       const cloudIds = new Set(DB.records.map(r => r.id));
       pendingSync.forEach(p => { if (!cloudIds.has(p.id)) DB.records.unshift(p); });
@@ -929,10 +931,11 @@ async function syncFromCloud() {
       const cloudIds = new Set(DB.expenses.map(r => r.id));
       pendingSyncExpenses.forEach(p => { if (!cloudIds.has(p.id)) DB.expenses.unshift(p); });
     }
-    saveLocal(); hideLoading();
-    refreshCurrentScreen();
-    return true;
-  } catch(e) { hideLoading(); return false; }
+    if (anyOk) saveLocal();
+  } catch(e) { /* erro inesperado — continua com o que tiver */ }
+  hideLoading();
+  refreshCurrentScreen();
+  return anyOk;
 }
 function mapVehicle(v) {
   return { id:v.id, placa:v.placa, nome:v.nome, tipo:v.tipo, medicao:v.medicao, lastKm:v.last_km, lastHor:v.last_hor, ativo:v.ativo };
@@ -1024,21 +1027,18 @@ async function afterLogin(scrollTop) {
   document.getElementById('headerUser').textContent = `👤 ${currentUser.name}`;
   document.getElementById('addVehicleBtn').style.display = currentUser.role!=='admin' ? 'none' : '';
   document.querySelectorAll('.admin-only').forEach(el => { el.style.display = currentUser.role==='admin' ? '' : 'none'; });
-  // Mostra a Home imediatamente com dados locais (se houver), sem esperar a nuvem
+  // Mostra a Home imediatamente com dados locais já disponíveis
   showScreen('home', scrollTop);
   try {
     if (navigator.onLine) await syncPending();
     const ok = await syncFromCloud();
-    if (!ok) {
-      loadLocal();
-      showToast('📵 Modo offline — dados locais');
-    }
+    // syncFromCloud já chama refreshCurrentScreen internamente (online ou offline)
+    if (!ok) showToast('📵 Modo offline — dados locais');
   } catch(e) {
     loadLocal();
+    refreshCurrentScreen();
     showToast('📵 Modo offline — dados locais');
   }
-  // Atualiza a tela com os dados que chegaram da nuvem (ou do localStorage no modo offline)
-  refreshCurrentScreen();
 }
 function confirmLogout() { openModal('modalLogout'); }
 function doLogout() {

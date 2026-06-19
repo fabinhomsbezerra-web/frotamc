@@ -1533,6 +1533,7 @@ async function submitRecord() {
     hideLoading();
     // Sobe a foto pro Supabase Storage (não pesa o banco) e salva a URL pública no registro
     if (rec.photo) {
+      showLoading('Enviando foto...');
       try {
         const photoUrl = await uploadPhotoToStorage(rec.photo, `registros/${rec.id}.jpg`);
         const { error: photoErr } = await supa.from('registros').update({ photo_b64: photoUrl }).eq('id', rec.id);
@@ -1541,6 +1542,7 @@ async function submitRecord() {
         DB.records[0].photo = photoUrl;
         saveLocal();
       } catch(e) { /* foto fica só local (base64) até a próxima sincronização poder reenviar */ }
+      hideLoading();
     }
   } catch(e) {
     hideLoading();
@@ -1584,6 +1586,7 @@ async function submitExpense() {
     hideLoading();
     // Sobe a foto pro Supabase Storage (não pesa o banco) e salva a URL pública na despesa
     if (rec.photo) {
+      showLoading('Enviando foto...');
       try {
         const photoUrl = await uploadPhotoToStorage(rec.photo, `despesas/${rec.id}.jpg`);
         const { error: photoErr } = await supa.from('despesas').update({ photo_b64: photoUrl }).eq('id', rec.id);
@@ -1592,6 +1595,7 @@ async function submitExpense() {
         DB.expenses[0].photo = photoUrl;
         saveLocal();
       } catch(e) { /* foto fica só local (base64) até a próxima sincronização poder reenviar */ }
+      hideLoading();
     }
   } catch(e) {
     hideLoading();

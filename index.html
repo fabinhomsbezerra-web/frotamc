@@ -886,6 +886,40 @@ input[type="hidden"] { display: none; }
 const SUPA_URL = 'https://odxpsonlpznrinbuktri.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9keHBzb25scHpucmluYnVrdHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDQ0NDIsImV4cCI6MjA5NzEyMDQ0Mn0.smy-2kUMSetaaC7SITqfEZG6ZwT7g0-FkDn1i_FZKUg';
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+const PHOTO_BUCKET = 'fotos-frotamc';
+
+// Converte um dataURL (base64) em Blob, sem depender de fetch() para dados locais
+function dataUrlToBlob(dataUrl) {
+  const [header, b64] = dataUrl.split(',');
+  const mime = header.match(/:(.*?);/)[1];
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i=0; i<bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+// Sobe uma foto (dataURL local) para o Supabase Storage e retorna a URL pública.
+// path ex: "registros/abc123.jpg" — usado tanto para criar quanto pra sobrescrever.
+async function uploadPhotoToStorage(dataUrl, path) {
+  const blob = dataUrlToBlob(dataUrl);
+  const { error } = await supa.storage.from(PHOTO_BUCKET).upload(path, blob, {
+    contentType: 'image/jpeg',
+    upsert: true
+  });
+  if (error) throw error;
+  const { data } = supa.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+// Remove uma foto do Storage a partir da URL pública salva no registro/despesa.
+// Falha silenciosamente (não bloqueia exclusão do registro se o arquivo já não existir).
+async function deletePhotoFromStorage(publicUrl) {
+  if (!publicUrl || !publicUrl.includes(`/${PHOTO_BUCKET}/`)) return;
+  try {
+    const path = publicUrl.split(`/${PHOTO_BUCKET}/`)[1].split('?')[0];
+    await supa.storage.from(PHOTO_BUCKET).remove([decodeURIComponent(path)]);
+  } catch(e) { /* não crítico */ }
+}
 
 const DB = { vehicles: [], records: [], users: [], expenses: [] };
 let currentUser = null;
@@ -1383,17 +1417,21 @@ function triggerGallery() {
 }
 function handlePhoto(e) {
   const file = e.target.files[0]; if(!file) return;
-  // Comprimir imagem para economizar espaço no banco
+  // Comprime mantendo boa legibilidade para texto pequeno (notas fiscais, painéis).
+  // Fotos vão para o Supabase Storage (1GB dedicado), não para o banco — folga maior de espaço.
   const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = () => {
-    const MAX = 800;
+    const MAX = 1920;
     let w = img.width, h = img.height;
     if (w > MAX || h > MAX) { if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
     const canvas = document.createElement('canvas');
     canvas.width=w; canvas.height=h;
-    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-    regState.photo = canvas.toDataURL('image/jpeg', 0.75);
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, w, h);
+    regState.photo = canvas.toDataURL('image/jpeg', 0.85);
     URL.revokeObjectURL(url);
     if (regState.step===1) renderStep();
   };
@@ -1493,13 +1531,16 @@ async function submitRecord() {
     if(Object.keys(upd).length) await supa.from('veiculos').update(upd).eq('id',rec.vehicleId);
 
     hideLoading();
-    // Tenta salvar foto (só se a coluna existir)
+    // Sobe a foto pro Supabase Storage (não pesa o banco) e salva a URL pública no registro
     if (rec.photo) {
       try {
-        const tiny = await compressPhoto(rec.photo, 400, 0.5);
-        const { error: photoErr } = await supa.from('registros').update({ photo_b64: tiny }).eq('id', rec.id);
-        if (!photoErr) { DB.records[0].photo = tiny; saveLocal(); }
-      } catch(e) { /* foto fica só local, tudo bem */ }
+        const photoUrl = await uploadPhotoToStorage(rec.photo, `registros/${rec.id}.jpg`);
+        const { error: photoErr } = await supa.from('registros').update({ photo_b64: photoUrl }).eq('id', rec.id);
+        if (photoErr) throw photoErr;
+        rec.photo = photoUrl;
+        DB.records[0].photo = photoUrl;
+        saveLocal();
+      } catch(e) { /* foto fica só local (base64) até a próxima sincronização poder reenviar */ }
     }
   } catch(e) {
     hideLoading();
@@ -1541,12 +1582,16 @@ async function submitExpense() {
     const { error } = await supa.from('despesas').insert(payload);
     if (error) throw new Error(error.message);
     hideLoading();
+    // Sobe a foto pro Supabase Storage (não pesa o banco) e salva a URL pública na despesa
     if (rec.photo) {
       try {
-        const tiny = await compressPhoto(rec.photo, 400, 0.5);
-        const { error: photoErr } = await supa.from('despesas').update({ photo_b64: tiny }).eq('id', rec.id);
-        if (!photoErr) { DB.expenses[0].photo = tiny; saveLocal(); }
-      } catch(e) { /* foto fica só local, tudo bem */ }
+        const photoUrl = await uploadPhotoToStorage(rec.photo, `despesas/${rec.id}.jpg`);
+        const { error: photoErr } = await supa.from('despesas').update({ photo_b64: photoUrl }).eq('id', rec.id);
+        if (photoErr) throw photoErr;
+        rec.photo = photoUrl;
+        DB.expenses[0].photo = photoUrl;
+        saveLocal();
+      } catch(e) { /* foto fica só local (base64) até a próxima sincronização poder reenviar */ }
     }
   } catch(e) {
     hideLoading();
@@ -1813,14 +1858,30 @@ function showRecordDetail(id) {
   `;
   openModal('modalDetail');
 }
-function downloadPhoto(dataUrl, filename) {
-  const a = document.createElement('a');
-  a.href = dataUrl;
-  a.download = `${filename}.jpg`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  showToast('⬇️ Foto salva!');
+async function downloadPhoto(url, filename) {
+  try {
+    let blobUrl = url;
+    let revoke = false;
+    if (!url.startsWith('data:')) {
+      // URL remota (Supabase Storage): precisa baixar como blob, senão o navegador
+      // costuma abrir a imagem em nova aba em vez de salvar (limitação cross-origin do atributo download)
+      showToast('⬇️ Baixando foto...');
+      const res = await fetch(url);
+      const blob = await res.blob();
+      blobUrl = URL.createObjectURL(blob);
+      revoke = true;
+    }
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = `${filename}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if (revoke) URL.revokeObjectURL(blobUrl);
+    showToast('⬇️ Foto salva!');
+  } catch(e) {
+    showToast('❌ Não foi possível baixar a foto');
+  }
 }
 function openFullPhoto(src) {
   const overlay=document.createElement('div');
@@ -1843,7 +1904,9 @@ function promptDeleteRecord(id) {
 }
 async function confirmDeleteRecord(id) {
   showLoading('Excluindo...');
+  const r = DB.records.find(x=>x.id===id);
   try{await supa.from('registros').delete().eq('id',id);}catch(e){}
+  if (r && r.photo) deletePhotoFromStorage(r.photo); // não bloqueia a exclusão, roda em paralelo
   hideLoading();
   DB.records=DB.records.filter(x=>x.id!==id);
   saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Registro excluído');
@@ -1886,7 +1949,9 @@ function promptDeleteExpense(id) {
 }
 async function confirmDeleteExpense(id) {
   showLoading('Excluindo...');
+  const r = DB.expenses.find(x=>x.id===id);
   try{await supa.from('despesas').delete().eq('id',id);}catch(e){}
+  if (r && r.photo) deletePhotoFromStorage(r.photo);
   hideLoading();
   DB.expenses=DB.expenses.filter(x=>x.id!==id);
   saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Despesa excluída');

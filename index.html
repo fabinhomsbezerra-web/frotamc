@@ -948,8 +948,8 @@ function loadLocal() {
 }
 
 // ── SYNC SUPABASE ──
-async function syncFromCloud() {
-  showLoading('Sincronizando...');
+async function syncFromCloud(silent) {
+  if (!silent) showLoading('Sincronizando...');
   let anyOk = false;
   try {
     // Cada query é independente — falha em uma não cancela as outras
@@ -974,10 +974,18 @@ async function syncFromCloud() {
     }
     if (anyOk) saveLocal();
   } catch(e) { /* erro inesperado — continua com o que tiver */ }
-  hideLoading();
+  if (!silent) hideLoading();
   refreshCurrentScreen();
   return anyOk;
 }
+// Verificação silenciosa em segundo plano — só pra manter o badge de notificação em dia,
+// sem mostrar "Sincronizando..." nem toasts (evita incomodar o usuário a cada minuto).
+async function silentBackgroundSync() {
+  if (!currentUser || isSyncing || document.hidden || !navigator.onLine) return;
+  try { await syncFromCloud(true); } catch(e) { /* ignora falha silenciosa */ }
+}
+setInterval(silentBackgroundSync, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) silentBackgroundSync(); });
 function mapVehicle(v) {
   return { id:v.id, placa:v.placa, nome:v.nome, tipo:v.tipo, medicao:v.medicao, lastKm:v.last_km, lastHor:v.last_hor, ativo:v.ativo };
 }
@@ -1122,11 +1130,19 @@ function markReportsSeen(){
   localStorage.setItem('fc_lastSeenReports', new Date().toISOString());
   updateNotifBadge();
 }
+// Extrai o instante REAL de criação do lançamento a partir do id (ex: "r1752180000000"),
+// pois o campo "dt" é a data do EVENTO e pode ser retroativa/editada pelo usuário —
+// não serve pra saber se o lançamento é "novo" desde a última visita ao painel.
+function recordCreatedAtMs(r){
+  const m = /^[a-z](\d+)/.exec(r.id||'');
+  if (m) return parseInt(m[1], 10);
+  return Date.parse(r.dt) || 0; // fallback pra registros sem esse padrão de id
+}
 function updateNotifBadge(){
   const badges = document.querySelectorAll('.reports-badge');
   if (!currentUser || currentUser.role!=='admin') { badges.forEach(b=>b.style.display='none'); return; }
-  const lastSeen = getLastSeenReports();
-  const count = DB.records.filter(r=>r.dt>lastSeen).length + DB.expenses.filter(r=>r.dt>lastSeen).length;
+  const lastSeenMs = Date.parse(getLastSeenReports());
+  const count = DB.records.filter(r=>recordCreatedAtMs(r)>lastSeenMs).length + DB.expenses.filter(r=>recordCreatedAtMs(r)>lastSeenMs).length;
   badges.forEach(b=>{
     if (count>0) { b.textContent = count>99 ? '99+' : String(count); b.style.display='inline-block'; }
     else { b.style.display='none'; }

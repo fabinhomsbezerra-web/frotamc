@@ -647,6 +647,11 @@ input[type="hidden"] { display: none; }
         <div class="stat-value" id="statKm" style="font-size:18px">0</div>
         <div class="stat-sub">no período</div>
       </div>
+      <div class="stat-card" style="grid-column:span 2">
+        <div class="stat-label">📈 Receitas</div>
+        <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
+        <div class="stat-sub">no período · calculado por h/km × valor do serviço</div>
+      </div>
     </div>
 
     <!-- Filtros -->
@@ -991,7 +996,7 @@ function mapVehicle(v) {
   return { id:v.id, placa:v.placa, nome:v.nome, tipo:v.tipo, medicao:v.medicao, lastKm:v.last_km, lastHor:v.last_hor, ativo:v.ativo };
 }
 function mapRecord(r) {
-  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, km:r.km, hor:r.hor, obs:r.obs, photo:r.photo_b64||null, gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
+  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, km:r.km, hor:r.hor, obs:r.obs, photo:r.photo_b64||null, gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo, valorUnitario:(r.valor_unitario!=null?Number(r.valor_unitario):null) };
 }
 function mapExpense(r) {
   return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, valor:r.valor, categoria:r.categoria||null, obs:r.obs, photo:r.photo_b64||null, gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
@@ -1000,7 +1005,7 @@ async function syncPending() {
   if (pendingSync.length) {
     for (const rec of [...pendingSync]) {
       try {
-        const { error } = await supa.from('registros').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, km:rec.km, hor:rec.hor, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto });
+        const { error } = await supa.from('registros').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, km:rec.km, hor:rec.hor, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto, valor_unitario:rec.valorUnitario!=null?rec.valorUnitario:null });
         if (!error) pendingSync = pendingSync.filter(p => p.id !== rec.id);
       } catch(e) {}
     }
@@ -1017,7 +1022,24 @@ async function syncPending() {
   if (!pendingSync.length && !pendingSyncExpenses.length) showToast('☁️ Dados sincronizados!');
 }
 
-// ── VEÍCULOS DO OPERADOR ──
+// ── RECEITAS (apenas admin) ──
+// Calcula a receita de um lançamento: (diferença de h/km em relação ao lançamento
+// anterior do mesmo veículo) × (valor por h/km informado pelo admin naquele lançamento).
+function calcReceita(r) {
+  if (r.valorUnitario == null) return 0;
+  const v = DB.vehicles.find(x => x.id === r.vehicleId);
+  const anteriores = DB.records
+    .filter(x => x.vehicleId === r.vehicleId && new Date(x.dt) < new Date(r.dt))
+    .sort((a, b) => new Date(b.dt) - new Date(a.dt));
+  const prev = anteriores[0];
+  if (!prev) return 0;
+  let delta = 0;
+  const usaHor = v && (v.medicao === 'hor' || (v.medicao === 'ambos' && r.hor != null && prev.hor != null));
+  if (usaHor && r.hor != null && prev.hor != null) delta = r.hor - prev.hor;
+  else if (r.km != null && prev.km != null) delta = r.km - prev.km;
+  if (!(delta > 0)) return 0;
+  return delta * r.valorUnitario;
+}
 function getVehiclesForUser(user) {
   if (!user) return [];
   if (user.role === 'admin') return DB.vehicles.filter(v => v.ativo);
@@ -1846,6 +1868,15 @@ function applyFilters() {
   const totalDespesas = all.filter(r=>r._kind==='despesa').reduce((s,r)=>s+(r.valor||0),0);
   const statKmEl = document.getElementById('statKm');
   if (statKmEl) { statKmEl.textContent = `R$ ${totalDespesas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`; }
+  const statReceitasEl = document.getElementById('statReceitas');
+  if (statReceitasEl) {
+    if (currentUser && currentUser.role === 'admin') {
+      const totalReceitas = all.filter(r=>r._kind==='medicao').reduce((s,r)=>s+calcReceita(r),0);
+      statReceitasEl.textContent = `R$ ${totalReceitas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+    } else {
+      statReceitasEl.closest('.stat-card').style.display = 'none';
+    }
+  }
   renderReportsList(all);
 }
 function renderReports(){updateStats();}
@@ -1862,6 +1893,7 @@ function renderReportsList(recs) {
     } else {
       if(r.km!=null)vals.push(`📍 ${Number(r.km).toLocaleString('pt-BR')} km`);
       if(r.hor!=null)vals.push(`⏱️ ${Number(r.hor).toLocaleString('pt-BR')} h`);
+      if(r.valorUnitario!=null){ const rec=calcReceita(r); if(rec>0) vals.push(`📈 R$ ${rec.toLocaleString('pt-BR',{minimumFractionDigits:2})}`); }
     }
     const clickFn = r._kind==='despesa' ? `showExpenseDetail('${r.id}')` : `showRecordDetail('${r.id}')`;
     const icon = r._kind==='despesa' ? '💰' : (v?getEmoji(v.tipo):'🚗');
@@ -1885,6 +1917,10 @@ function showRecordDetail(id) {
   if(r.hor!=null)vals.push(`<tr><td class="text-muted" style="padding:6px 0;">⏱️ Horímetro</td><td style="font-weight:700;text-align:right">${Number(r.hor).toLocaleString('pt-BR')} h</td></tr>`);
   const canDelete=currentUser.role==='admin'||r.userId===currentUser.id;
   const isAdmin=currentUser.role==='admin';
+  if (isAdmin && r.valorUnitario!=null) {
+    const receita = calcReceita(r);
+    vals.push(`<tr><td class="text-muted" style="padding:6px 0;">📈 Receita</td><td style="font-weight:700;text-align:right;color:#16a34a">R$ ${receita.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td></tr>`);
+  }
   document.getElementById('modalDetailContent').innerHTML=`
     <div class="flex-center mb-12">
       <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
@@ -2082,6 +2118,11 @@ function editRecord(id) {
       <label class="form-label">💬 Observação</label>
       <textarea class="form-input" id="editRecordObs" rows="3" style="resize:none">${r.obs||''}</textarea>
     </div>
+    ${currentUser.role==='admin'?`<div class="form-group">
+      <label class="form-label">💲 Valor do serviço (R$ por ${(v&&v.medicao==='km')?'km':'h'})</label>
+      <input type="text" class="form-input" id="editRecordValor" value="${r.valorUnitario!=null?String(r.valorUnitario).replace('.',','):''}" placeholder="Ex: 120,00" inputmode="decimal">
+      <div class="form-hint">🔒 Visível somente para administradores. A receita é calculada automaticamente: (diferença de h/km em relação ao lançamento anterior) × este valor. Deixe em branco para não gerar receita.</div>
+    </div>`:''}
     <div class="alert alert-warning" style="margin-bottom:16px">
       <span class="alert-icon">⚠️</span>
       <span>Editar este registro pode afetar a referência de "última leitura" do veículo. Confira os valores antes de salvar.</span>
@@ -2098,16 +2139,19 @@ async function saveEditRecord() {
   const horEl=document.getElementById('editRecordHor');
   const dateEl=document.getElementById('editRecordDate');
   const obsEl=document.getElementById('editRecordObs');
+  const valorEl=document.getElementById('editRecordValor');
   let newKm = kmEl ? (kmEl.value.trim()!==''? parseDecimal(kmEl.value): null) : r.km;
   let newHor = horEl ? (horEl.value.trim()!==''? parseDecimal(horEl.value): null) : r.hor;
+  let newValorUnitario = valorEl ? (valorEl.value.trim()!==''? parseDecimal(valorEl.value): null) : r.valorUnitario;
   if((kmEl&&kmEl.value.trim()!==''&&isNaN(newKm)) || (horEl&&horEl.value.trim()!==''&&isNaN(newHor))){ showToast('❌ Valor inválido!'); return; }
+  if(valorEl&&valorEl.value.trim()!==''&&isNaN(newValorUnitario)){ showToast('❌ Valor do serviço inválido!'); return; }
   const newDt = dateEl.value ? new Date(dateEl.value).toISOString() : r.dt;
   const newObs = obsEl.value.trim();
   showLoading('Salvando...');
   try {
-    const { error } = await supa.from('registros').update({ km:newKm, hor:newHor, dt:newDt, obs:newObs||null }).eq('id', id);
+    const { error } = await supa.from('registros').update({ km:newKm, hor:newHor, dt:newDt, obs:newObs||null, valor_unitario:newValorUnitario }).eq('id', id);
     if (error) throw new Error(error.message);
-    r.km=newKm; r.hor=newHor; r.dt=newDt; r.obs=newObs;
+    r.km=newKm; r.hor=newHor; r.dt=newDt; r.obs=newObs; r.valorUnitario=newValorUnitario;
     // Atualiza referência de última leitura do veículo, caso este seja o registro mais recente
     const v=DB.vehicles.find(x=>x.id===r.vehicleId);
     if (v) {

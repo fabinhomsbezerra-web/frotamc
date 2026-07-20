@@ -885,7 +885,7 @@ input[type="hidden"] { display: none; }
 </div>
 
 <!-- INPUT DE FOTO OCULTO -->
-<input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhoto(event)">
+<input type="file" id="photoInput" accept="image/*,application/pdf" style="display:none" onchange="handlePhoto(event)">
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -905,16 +905,49 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([arr], { type: mime });
 }
 
-// Sobe uma foto (dataURL local) para o Supabase Storage e retorna a URL pública.
-// path ex: "registros/abc123.jpg" — usado tanto para criar quanto pra sobrescrever.
+// Verifica se um anexo (dataURL local ou URL pública do Storage) é um PDF
+function isPdfAttachment(url) {
+  if (!url) return false;
+  if (url.startsWith('data:')) return url.startsWith('data:application/pdf');
+  return /\.pdf(\?|$)/i.test(url);
+}
+// Miniatura de anexo (foto ou PDF) usada nas telas de confirmação/resumo
+function photoThumbHTML(photo, size) {
+  size = size || 80;
+  if (!photo) return `<div style="width:${size}px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📷</div>`;
+  if (isPdfAttachment(photo)) return `<div style="width:${size}px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📄</div>`;
+  return `<img src="${photo}" style="width:${size}px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`;
+}
+// Bloco completo do anexo (foto ou PDF) usado nas telas de detalhe de registro/despesa
+function attachmentDetailHTML(photo, filename) {
+  if (!photo) return '<div style="background:var(--surface2);border-radius:12px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:14px;color:var(--text3)">📷 Sem foto registrada</div>';
+  if (isPdfAttachment(photo)) {
+    return `<div style="background:var(--surface2);border-radius:12px;padding:28px 16px;margin-bottom:8px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer" onclick="window.open('${photo}','_blank')">
+      <div style="font-size:40px">📄</div><div style="font-size:14px;font-weight:600;color:var(--text2)">Documento PDF anexado — toque para abrir</div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${filename}')">⬇️ Baixar PDF</button>
+    </div>`;
+  }
+  return `<img src="${photo}" style="width:100%;border-radius:12px;margin-bottom:8px;object-fit:cover;max-height:220px;cursor:pointer" onclick="openFullPhoto(this.src,'${filename}')">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${filename}')">⬇️ Foto</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhotoAsPDF('${photo}','${filename}')">📄 PDF</button>
+    </div>`;
+}
+
+// Sobe uma foto ou PDF (dataURL local) para o Supabase Storage e retorna a URL pública.
+// path ex: "registros/abc123.jpg" — a extensão é ajustada automaticamente se for PDF.
 async function uploadPhotoToStorage(dataUrl, path) {
   const blob = dataUrlToBlob(dataUrl);
-  const { error } = await supa.storage.from(PHOTO_BUCKET).upload(path, blob, {
-    contentType: 'image/jpeg',
+  const isPdf = blob.type === 'application/pdf';
+  const finalPath = isPdf ? path.replace(/\.jpg$/i, '.pdf') : path;
+  const { error } = await supa.storage.from(PHOTO_BUCKET).upload(finalPath, blob, {
+    contentType: blob.type || (isPdf ? 'application/pdf' : 'image/jpeg'),
     upsert: true
   });
   if (error) throw error;
-  const { data } = supa.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+  const { data } = supa.storage.from(PHOTO_BUCKET).getPublicUrl(finalPath);
   return data.publicUrl;
 }
 
@@ -1300,30 +1333,31 @@ function renderStep() {
       html += `<div class="empty"><div class="empty-icon">🚗</div><div class="empty-title">Nenhum veículo disponível</div><p class="empty-text">Solicite ao administrador liberar veículos para você</p></div>`;
     } else {
       html += `<div class="vehicle-grid">` + myVehicles.map(v =>
-        `<div class="vehicle-card ${regState.vehicle?.id===v.id?'selected':''}" onclick="selectVehicle('${v.id}')">
+        `<div class="vehicle-card ${regState.vehicle?.id===v.id?'selected':''}" data-vid="${v.id}" onclick="selectVehicle('${v.id}')">
           <div class="vehicle-emoji">${getEmoji(v.tipo)}</div>
           <div class="vehicle-name">${v.nome}</div>
           <div class="vehicle-plate">${v.placa}</div>
         </div>`
       ).join('') + `</div>`;
-      html += `<div style="margin-top:20px"><button class="btn btn-primary" onclick="nextStep()" ${!regState.vehicle?'disabled style="opacity:0.4"':''}>Continuar →</button></div>`;
+      html += `<div style="margin-top:20px"><button class="btn btn-primary" id="vehicleContinueBtn" onclick="nextStep()" ${!regState.vehicle?'disabled style="opacity:0.4"':''}>Continuar →</button></div>`;
     }
 
   } else if (regState.step===1) {
     const hasPhoto = !!regState.photo;
-    const label = isDespesa ? 'Foto da despesa' : 'Foto do painel';
+    const isPdf = hasPhoto && isPdfAttachment(regState.photo);
+    const label = isDespesa ? 'Foto ou PDF da despesa' : 'Foto ou PDF do painel';
     const hint = isDespesa ? 'Enquadre bem a nota fiscal / comprovante' : 'Enquadre bem o hodômetro / horímetro';
-    const placeholderText = isDespesa ? 'Toque para adicionar foto da nota / comprovante' : 'Toque para adicionar foto do painel';
+    const placeholderText = isDespesa ? 'Toque para adicionar foto ou PDF da nota / comprovante' : 'Toque para adicionar foto ou PDF do painel';
     html += `<div class="section-header">${label}</div>
     <div class="photo-area" onclick="triggerCamera()">
-      ${hasPhoto?`<img src="${regState.photo}" alt="foto"><div class="photo-overlay"><div style="font-size:32px">🔄</div><div style="font-size:14px;font-weight:600">Trocar foto</div></div>`:
+      ${hasPhoto?(isPdf?`<div class="photo-icon">📄</div><div class="photo-text">PDF anexado</div><div class="text-sm" style="color:var(--primary);font-weight:600">Toque para trocar</div>`:`<img src="${regState.photo}" alt="foto"><div class="photo-overlay"><div style="font-size:32px">🔄</div><div style="font-size:14px;font-weight:600">Trocar foto</div></div>`):
       `<div class="photo-icon">📷</div><div class="photo-text">${placeholderText}</div><div class="text-sm text-muted">${hint}</div>`}
     </div>
     <div style="display:flex;gap:10px;margin-top:12px">
       <button class="btn btn-secondary" style="font-size:15px" onclick="triggerCamera()">📷 Câmera</button>
-      <button class="btn btn-secondary" style="font-size:15px" onclick="triggerGallery()">🖼️ Galeria</button>
+      <button class="btn btn-secondary" style="font-size:15px" onclick="triggerGallery()">🖼️ Galeria / PDF</button>
     </div>
-    <div class="form-hint" style="margin-top:8px">A foto é opcional. Você pode adicionar pela câmera ou escolher uma imagem já salva na galeria (inclusive uma baixada de outro celular).</div>
+    <div class="form-hint" style="margin-top:8px">A foto é opcional. Você pode adicionar pela câmera, escolher uma imagem já salva na galeria (inclusive baixada de outro celular), ou anexar um arquivo PDF.</div>
     <div style="display:flex;gap:10px;margin-top:12px">
       <button class="btn btn-secondary" onclick="prevStep()">← Voltar</button>
       <button class="btn btn-primary" onclick="nextStep()">Continuar →</button>
@@ -1413,8 +1447,7 @@ function renderStep() {
           <div style="font-size:18px;font-weight:700;margin-top:4px">${v.nome}</div>
           <div class="font-mono text-muted">${v.placa}</div>
         </div>
-        ${regState.photo?`<img src="${regState.photo}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`:
-        '<div style="width:80px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📷</div>'}
+        ${photoThumbHTML(regState.photo)}
       </div>
       <div class="divider"></div>
       <table style="width:100%">${vals.join('')}</table>
@@ -1440,8 +1473,7 @@ function renderStep() {
           <div style="font-size:18px;font-weight:700;margin-top:4px">${v.nome}</div>
           <div class="font-mono text-muted">${v.placa}</div>
         </div>
-        ${regState.photo?`<img src="${regState.photo}" style="width:80px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`:
-        '<div style="width:80px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📷</div>'}
+        ${photoThumbHTML(regState.photo)}
       </div>
       <div class="divider"></div>
       <table style="width:100%">
@@ -1462,7 +1494,15 @@ function renderStep() {
 }
 function nextStep() { regState.step++; renderStep(); }
 function prevStep() { regState.step--; renderStep(); }
-function selectVehicle(id) { regState.vehicle=DB.vehicles.find(v=>v.id===id); renderStep(); }
+function selectVehicle(id) {
+  regState.vehicle = DB.vehicles.find(v=>v.id===id);
+  // Atualiza só a seleção visual (sem re-renderizar a tela inteira), pra não pular/rolar a página
+  document.querySelectorAll('#registerContent .vehicle-card').forEach(card=>{
+    card.classList.toggle('selected', card.dataset.vid===id);
+  });
+  const btn = document.getElementById('vehicleContinueBtn');
+  if (btn) { btn.removeAttribute('disabled'); btn.style.opacity='1'; }
+}
 
 // ── FOTO ──
 function triggerPhoto() { triggerCamera(); }
@@ -1478,6 +1518,18 @@ function triggerGallery() {
 }
 function handlePhoto(e) {
   const file = e.target.files[0]; if(!file) return;
+  // PDF: não passa pelo processamento de imagem (canvas), só converte pra dataURL direto
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name||'')) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      regState.photo = reader.result;
+      if (regState.step===1) renderStep();
+    };
+    reader.onerror = () => showToast('❌ Não foi possível ler o PDF');
+    reader.readAsDataURL(file);
+    e.target.value = '';
+    return;
+  }
   // Comprime mantendo boa legibilidade para texto pequeno (notas fiscais, painéis).
   // Fotos vão para o Supabase Storage (1GB dedicado), não para o banco — folga maior de espaço.
   const img = new Image();
@@ -1926,11 +1978,7 @@ function showRecordDetail(id) {
       <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
       <div><div style="font-size:18px;font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted">${v?v.placa:''}</div></div>
     </div>
-    ${r.photo?`<img src="${r.photo}" style="width:100%;border-radius:12px;margin-bottom:8px;object-fit:cover;max-height:220px;cursor:pointer" onclick="openFullPhoto(this.src,'${buildFileName(v,r.dt)}')">
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${r.photo}','${buildFileName(v,r.dt)}')">⬇️ Foto</button>
-      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhotoAsPDF('${r.photo}','${buildFileName(v,r.dt)}')">📄 PDF</button>
-    </div>`:'<div style="background:var(--surface2);border-radius:12px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:14px;color:var(--text3)">📷 Sem foto registrada</div>'}
+    ${attachmentDetailHTML(r.photo, buildFileName(v,r.dt))}
     <table style="width:100%;margin-bottom:12px">${vals.join('')}</table>
     <div class="divider"></div>
     <div class="text-sm text-muted" style="margin-bottom:6px">🕐 ${fmtDateTime(r.dt)}</div>
@@ -1985,12 +2033,13 @@ async function downloadPhotoAsPDF(url, filename) {
 }
 async function downloadPhoto(url, filename) {
   try {
+    const ext = isPdfAttachment(url) ? 'pdf' : 'jpg';
     let blobUrl = url;
     let revoke = false;
     if (!url.startsWith('data:')) {
       // URL remota (Supabase Storage): precisa baixar como blob, senão o navegador
-      // costuma abrir a imagem em nova aba em vez de salvar (limitação cross-origin do atributo download)
-      showToast('⬇️ Baixando foto...');
+      // costuma abrir o arquivo em nova aba em vez de salvar (limitação cross-origin do atributo download)
+      showToast(ext==='pdf' ? '⬇️ Baixando PDF...' : '⬇️ Baixando foto...');
       const res = await fetch(url);
       const blob = await res.blob();
       blobUrl = URL.createObjectURL(blob);
@@ -1998,14 +2047,14 @@ async function downloadPhoto(url, filename) {
     }
     const a = document.createElement('a');
     a.href = blobUrl;
-    a.download = `${filename}.jpg`;
+    a.download = `${filename}.${ext}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     if (revoke) URL.revokeObjectURL(blobUrl);
-    showToast('⬇️ Foto salva!');
+    showToast(ext==='pdf' ? '⬇️ PDF salvo!' : '⬇️ Foto salva!');
   } catch(e) {
-    showToast('❌ Não foi possível baixar a foto');
+    showToast('❌ Não foi possível baixar o arquivo');
   }
 }
 function openFullPhoto(src, filename) {
@@ -2052,11 +2101,7 @@ function showExpenseDetail(id) {
       <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
       <div><div style="font-size:18px;font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted">${v?v.placa:''}</div></div>
     </div>
-    ${r.photo?`<img src="${r.photo}" style="width:100%;border-radius:12px;margin-bottom:8px;object-fit:cover;max-height:220px;cursor:pointer" onclick="openFullPhoto(this.src,'${buildFileName(v,r.dt)}')">
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${r.photo}','${buildFileName(v,r.dt)}')">⬇️ Foto</button>
-      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhotoAsPDF('${r.photo}','${buildFileName(v,r.dt)}')">📄 PDF</button>
-    </div>`:'<div style="background:var(--surface2);border-radius:12px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:14px;color:var(--text3)">📷 Sem foto registrada</div>'}
+    ${attachmentDetailHTML(r.photo, buildFileName(v,r.dt))}
     <table style="width:100%;margin-bottom:12px">
       <tr><td class="text-muted" style="padding:6px 0;">💰 Valor</td><td style="font-weight:700;text-align:right">${r.valor!=null?`R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`:'Não informado'}</td></tr>
       ${r.categoria?`<tr><td class="text-muted" style="padding:6px 0;">🏷️ Categoria</td><td style="font-weight:700;text-align:right">${r.categoria}</td></tr>`:''}

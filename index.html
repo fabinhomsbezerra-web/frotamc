@@ -1058,20 +1058,28 @@ async function syncPending() {
 // ── RECEITAS (apenas admin) ──
 // Calcula a receita de um lançamento: (diferença de h/km em relação ao lançamento
 // anterior do mesmo veículo) × (valor por h/km informado pelo admin naquele lançamento).
-function calcReceita(r) {
-  if (r.valorUnitario == null) return 0;
-  const v = DB.vehicles.find(x => x.id === r.vehicleId);
+function getPrevRecord(r) {
   const anteriores = DB.records
     .filter(x => x.vehicleId === r.vehicleId && new Date(x.dt) < new Date(r.dt))
     .sort((a, b) => new Date(b.dt) - new Date(a.dt));
-  const prev = anteriores[0];
-  if (!prev) return 0;
-  let delta = 0;
+  return anteriores[0] || null;
+}
+// Retorna { prev, usaHor, prevValor, delta } com base na mesma lógica usada por calcReceita.
+function getReceitaBreakdown(r) {
+  const v = DB.vehicles.find(x => x.id === r.vehicleId);
+  const prev = getPrevRecord(r);
+  if (!prev) return null;
+  let delta = 0, prevValor = null;
   const usaHor = v && (v.medicao === 'hor' || (v.medicao === 'ambos' && r.hor != null && prev.hor != null));
-  if (usaHor && r.hor != null && prev.hor != null) delta = r.hor - prev.hor;
-  else if (r.km != null && prev.km != null) delta = r.km - prev.km;
-  if (!(delta > 0)) return 0;
-  return delta * r.valorUnitario;
+  if (usaHor && r.hor != null && prev.hor != null) { delta = r.hor - prev.hor; prevValor = prev.hor; }
+  else if (r.km != null && prev.km != null) { delta = r.km - prev.km; prevValor = prev.km; }
+  return { prev, usaHor, prevValor, delta };
+}
+function calcReceita(r) {
+  if (r.valorUnitario == null) return 0;
+  const b = getReceitaBreakdown(r);
+  if (!b || !(b.delta > 0)) return 0;
+  return b.delta * r.valorUnitario;
 }
 function getVehiclesForUser(user) {
   if (!user) return [];
@@ -1972,6 +1980,14 @@ function showRecordDetail(id) {
   if (isAdmin && r.valorUnitario!=null) {
     const receita = calcReceita(r);
     vals.push(`<tr><td class="text-muted" style="padding:6px 0;">📈 Receita</td><td style="font-weight:700;text-align:right;color:#16a34a">R$ ${receita.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td></tr>`);
+    const b = getReceitaBreakdown(r);
+    if (b && b.prevValor!=null) {
+      const unidade = b.usaHor ? 'h' : 'km';
+      const icone = b.usaHor ? '⏱️' : '📍';
+      vals.push(`<tr><td class="text-muted" style="padding:6px 0;">${icone} ${b.usaHor?'Horímetro':'Km'} anterior</td><td style="text-align:right">${Number(b.prevValor).toLocaleString('pt-BR')} ${unidade}</td></tr>`);
+      const deltaTxt = b.delta>0 ? Number(b.delta).toLocaleString('pt-BR') : '0';
+      vals.push(`<tr><td class="text-muted" style="padding:6px 0;">${b.usaHor?'⏳ Horas trabalhadas':'🛣️ Km rodados'}</td><td style="font-weight:700;text-align:right">${deltaTxt} ${unidade}</td></tr>`);
+    }
   }
   document.getElementById('modalDetailContent').innerHTML=`
     <div class="flex-center mb-12">

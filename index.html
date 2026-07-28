@@ -675,6 +675,9 @@ input[type="hidden"] { display: none; }
       </div>
     </div>
 
+    <div class="section-header" id="expenseByVehicleHeader" style="display:none">💰 Despesas por veículo</div>
+    <div class="card mb-12" id="expenseByVehicleList" style="display:none"></div>
+
     <div class="section-header">Histórico de registros</div>
     <div class="card" id="reportsList">
       <div class="empty">
@@ -1937,7 +1940,39 @@ function applyFilters() {
       statReceitasEl.closest('.stat-card').style.display = 'none';
     }
   }
+  renderExpenseByVehicle(all, vId);
   renderReportsList(all);
+}
+function renderExpenseByVehicle(all, vId) {
+  const headerEl = document.getElementById('expenseByVehicleHeader');
+  const listEl = document.getElementById('expenseByVehicleList');
+  if (!headerEl || !listEl) return;
+  // Só mostra o resumo quando "Todos os veículos" está selecionado — com 1 veículo já filtrado, o card de despesas basta.
+  if (vId) { headerEl.style.display = 'none'; listEl.style.display = 'none'; return; }
+  const exps = all.filter(r => r._kind === 'despesa');
+  if (!exps.length) { headerEl.style.display = 'none'; listEl.style.display = 'none'; return; }
+  const byVehicle = {};
+  exps.forEach(r => {
+    const key = r.vehicleId || '__sem_veiculo__';
+    byVehicle[key] = (byVehicle[key] || 0) + (r.valor || 0);
+  });
+  const rows = Object.keys(byVehicle).map(vid => {
+    const v = DB.vehicles.find(x => x.id === vid);
+    return {
+      nome: v ? `${getEmoji(v.tipo)} ${v.nome} (${v.placa})` : '❓ Veículo excluído/sem cadastro',
+      total: byVehicle[vid]
+    };
+  }).sort((a, b) => b.total - a.total);
+  headerEl.style.display = '';
+  listEl.style.display = '';
+  listEl.innerHTML = rows.map(r => `
+    <div class="list-item" style="cursor:default">
+      <div class="list-content">
+        <div class="list-title">${r.nome}</div>
+      </div>
+      <div class="list-meta text-right" style="font-weight:700">R$ ${r.total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+    </div>
+  `).join('');
 }
 function renderReports(){updateStats();}
 function renderReportsList(recs) {

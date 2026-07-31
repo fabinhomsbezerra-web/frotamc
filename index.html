@@ -138,6 +138,7 @@ body { overflow: hidden; }
 .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
 .btn-success { background: var(--success); color: white; }
 .btn-danger { background: var(--danger); color: white; }
+.btn-accent { background: #D97706; color: white; }
 .btn-sm { padding: 10px 16px; font-size: 14px; border-radius: var(--radius-sm); }
 .btn-outline {
   background: transparent; color: var(--primary);
@@ -340,6 +341,10 @@ select.form-input { cursor: pointer; }
 .modal-header {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 5;
 }
 .modal-title { font-size: 18px; font-weight: 700; }
 .modal-body { padding: 20px; }
@@ -451,48 +456,20 @@ select.form-input { cursor: pointer; }
 }
 
 /* A partir de 1024px (notebook/PC), aproveita melhor a tela larga: */
-/* cartão mais amplo, menu vira uma barra de abas no topo (em vez de flutuar embaixo), */
-/* hover nos elementos clicáveis e mais colunas nos cartões de estatística. */
+/* cartão mais amplo, hover nos elementos clicáveis e mais colunas nos cartões de estatística. */
+/* O menu continua embaixo, igual no celular. */
 @media (min-width: 1024px) {
   .screen, .login-screen {
     max-width: 800px;
     box-shadow: 0 0 60px rgba(0,0,0,0.10);
   }
 
-  /* menu vira barra de abas fixa logo abaixo do header, ao invés de flutuar no rodapé */
-  .screen > .header { order: 1; }
-  .screen > .bottom-nav {
-    order: 2;
-    position: static;
-    left: auto; right: auto; transform: none;
-    max-width: none;
-    border-top: none;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0;
-    justify-content: center;
-    gap: 4px;
-  }
-  .screen > .content { order: 3; padding-bottom: 32px; }
-
-  .nav-item {
-    flex: 0 1 150px;
-    flex-direction: row;
-    gap: 8px;
-    padding: 14px 10px;
-    position: relative;
-  }
-  .nav-item .nav-icon { font-size: 18px; }
   .nav-item:hover { background: var(--surface2); }
-  .nav-item.active::after {
-    content: "";
-    position: absolute; left: 14px; right: 14px; bottom: 0;
-    height: 2px; background: var(--primary);
-  }
-  .badge { position: static; margin-left: 2px; }
 
   /* dá feedback de hover pra quem usa mouse (no touch isso simplesmente não é acionado) */
   .btn:hover { opacity: 0.92; }
   .btn-outline:hover { background: var(--primary-light); }
+  .btn-accent:hover { opacity: 0.9; }
   .btn-icon:hover { background: var(--border); }
   .list-item:hover { background: var(--surface2); }
   .tag:hover { border-color: var(--primary); }
@@ -596,7 +573,7 @@ input[type="hidden"] { display: none; }
     <button class="btn btn-primary" onclick="startRegister('medicao')" style="font-size:20px;padding:22px;margin-bottom:12px;">
       ➕ Novo Registro
     </button>
-    <button class="btn btn-secondary" onclick="startRegister('despesa')" style="font-size:17px;padding:16px;margin-bottom:20px;">
+    <button class="btn btn-accent" onclick="startRegister('despesa')" style="font-size:17px;padding:16px;margin-bottom:20px;">
       💰 Nova Despesa
     </button>
 

@@ -434,9 +434,8 @@ select.form-input { cursor: pointer; }
 .tag.selected { border-color: var(--primary); background: var(--primary-light); color: var(--primary); }
 
 /* ── RESPONSIVE ── */
-/* Em telas pequenas (celular), o app ocupa 100% da largura normalmente. */
-/* A partir de 480px (tablets/desktop), centraliza o "cartão" do app numa largura confortável, */
-/* sem travar a largura útil do conteúdo numa coluna estreita demais. */
+/* Em telas pequenas (celular), o app ocupa 100% da largura normalmente — nada nesta seção afeta isso. */
+/* A partir de 480px (tablets), centraliza o "cartão" do app numa largura confortável. */
 @media (min-width: 480px) {
   body { background: var(--surface2); }
   .screen, .login-screen {
@@ -448,6 +447,71 @@ select.form-input { cursor: pointer; }
     max-width: 520px;
     left: 50%;
     transform: translateX(-50%);
+  }
+}
+
+/* A partir de 1024px (notebook/PC), aproveita melhor a tela larga: */
+/* cartão mais amplo, menu vira uma barra de abas no topo (em vez de flutuar embaixo), */
+/* hover nos elementos clicáveis e mais colunas nos cartões de estatística. */
+@media (min-width: 1024px) {
+  .screen, .login-screen {
+    max-width: 800px;
+    box-shadow: 0 0 60px rgba(0,0,0,0.10);
+  }
+
+  /* menu vira barra de abas fixa logo abaixo do header, ao invés de flutuar no rodapé */
+  .screen > .header { order: 1; }
+  .screen > .bottom-nav {
+    order: 2;
+    position: static;
+    left: auto; right: auto; transform: none;
+    max-width: none;
+    border-top: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+    justify-content: center;
+    gap: 4px;
+  }
+  .screen > .content { order: 3; padding-bottom: 32px; }
+
+  .nav-item {
+    flex: 0 1 150px;
+    flex-direction: row;
+    gap: 8px;
+    padding: 14px 10px;
+    position: relative;
+  }
+  .nav-item .nav-icon { font-size: 18px; }
+  .nav-item:hover { background: var(--surface2); }
+  .nav-item.active::after {
+    content: "";
+    position: absolute; left: 14px; right: 14px; bottom: 0;
+    height: 2px; background: var(--primary);
+  }
+  .badge { position: static; margin-left: 2px; }
+
+  /* dá feedback de hover pra quem usa mouse (no touch isso simplesmente não é acionado) */
+  .btn:hover { opacity: 0.92; }
+  .btn-outline:hover { background: var(--primary-light); }
+  .btn-icon:hover { background: var(--border); }
+  .list-item:hover { background: var(--surface2); }
+  .tag:hover { border-color: var(--primary); }
+
+  /* estatísticas aproveitam a largura extra */
+  .stats-grid { grid-template-columns: repeat(4, 1fr); }
+
+  /* modais deixam de ser "folha deslizando de baixo" e viram uma janela central, mais natural no PC */
+  .modal-overlay { align-items: center; }
+  .modal {
+    width: 90%;
+    max-width: 480px;
+    max-height: 85vh;
+    border-radius: 20px;
+    animation: modalPop 0.2s ease;
+  }
+  @keyframes modalPop {
+    from { transform: scale(0.96); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
   }
 }
 

@@ -689,17 +689,14 @@ input[type="hidden"] { display: none; }
         <div class="stat-sub">no período</div>
       </div>
       <div class="stat-card" style="grid-column:span 2">
-        <div class="flex-between" style="align-items:flex-start">
-          <div>
-            <div class="stat-label">📈 Receitas</div>
-            <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
-            <div class="stat-sub">no período · calculado por h/km × valor do serviço</div>
-          </div>
-          <div style="text-align:right">
-            <div class="stat-label">Lucro</div>
-            <div class="stat-value" id="statLucroPct" style="font-size:18px">0%</div>
-          </div>
-        </div>
+        <div class="stat-label">📈 Receitas</div>
+        <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
+        <div class="stat-sub">no período · calculado por h/km × valor do serviço</div>
+      </div>
+      <div class="stat-card" style="grid-column:span 2" id="statLucroCard">
+        <div class="stat-label">💹 Lucro</div>
+        <div class="stat-value" id="statLucroPct" style="font-size:18px">0%</div>
+        <div class="stat-sub">receita menos despesas, no período</div>
       </div>
     </div>
 
@@ -1979,10 +1976,12 @@ function applyFilters() {
   if (statKmEl) { statKmEl.textContent = `R$ ${totalDespesas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`; }
   const statReceitasEl = document.getElementById('statReceitas');
   const statLucroPctEl = document.getElementById('statLucroPct');
+  const statLucroCardEl = document.getElementById('statLucroCard');
   if (statReceitasEl) {
     if (currentUser && currentUser.role === 'admin') {
       const totalReceitas = all.filter(r=>r._kind==='medicao').reduce((s,r)=>s+calcReceita(r),0);
       statReceitasEl.textContent = `R$ ${totalReceitas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+      if (statLucroCardEl) statLucroCardEl.style.display = '';
       if (statLucroPctEl) {
         if (totalReceitas > 0) {
           const lucroPct = ((totalReceitas - totalDespesas) / totalReceitas) * 100;
@@ -1995,6 +1994,7 @@ function applyFilters() {
       }
     } else {
       statReceitasEl.closest('.stat-card').style.display = 'none';
+      if (statLucroCardEl) statLucroCardEl.style.display = 'none';
     }
   }
   renderReportsList(all);

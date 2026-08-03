@@ -688,22 +688,20 @@ input[type="hidden"] { display: none; }
         <div class="stat-value" id="statKm" style="font-size:18px">0</div>
         <div class="stat-sub">no período</div>
       </div>
-      <div class="stat-card" style="grid-column:span 2">
-        <div style="display:flex;align-items:flex-start;gap:8px">
-          <div style="flex:1.3">
-            <div class="stat-label">📈 Receitas</div>
-            <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
-            <div class="stat-sub">no período · calculado por h/km × valor do serviço</div>
-          </div>
-          <div style="flex:1;text-align:right">
-            <div class="stat-label">Lucro</div>
-            <div class="stat-value" id="statLucroValor" style="font-size:18px">R$ 0,00</div>
-          </div>
-          <div style="flex:0.7;text-align:right">
-            <div class="stat-label">%</div>
-            <div class="stat-value" id="statLucroPct" style="font-size:18px">0%</div>
-          </div>
-        </div>
+      <div class="stat-card stat-receita">
+        <div class="stat-label">📈 Receitas</div>
+        <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
+        <div class="stat-sub">no período</div>
+      </div>
+      <div class="stat-card stat-receita">
+        <div class="stat-label">💵 Lucro</div>
+        <div class="stat-value" id="statLucroValor" style="font-size:18px">R$ 0,00</div>
+        <div class="stat-sub">receita − despesa</div>
+      </div>
+      <div class="stat-card stat-receita">
+        <div class="stat-label">📊 Lucro %</div>
+        <div class="stat-value" id="statLucroPct" style="font-size:18px">0%</div>
+        <div class="stat-sub">margem no período</div>
       </div>
     </div>
 
@@ -2052,6 +2050,7 @@ function applyFilters() {
   const statLucroPctEl = document.getElementById('statLucroPct');
   if (statReceitasEl) {
     if (currentUser && currentUser.role === 'admin') {
+      document.querySelectorAll('.stat-receita').forEach(el => el.style.display = '');
       const totalReceitas = all.filter(r=>r._kind==='medicao').reduce((s,r)=>s+calcReceita(r),0);
       statReceitasEl.textContent = `R$ ${totalReceitas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
       const lucroValor = totalReceitas - totalDespesas;
@@ -2070,7 +2069,7 @@ function applyFilters() {
         }
       }
     } else {
-      statReceitasEl.closest('.stat-card').style.display = 'none';
+      document.querySelectorAll('.stat-receita').forEach(el => el.style.display = 'none');
     }
   }
   const listFiltered = reportTypeFilter==='all' ? all : all.filter(r=>r._kind===reportTypeFilter);

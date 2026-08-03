@@ -1354,7 +1354,7 @@ function renderHome() {
   const mineRecs = DB.records.filter(r => isAdmin || r.userId === currentUser.id).map(r=>({...r, _kind:'medicao'}));
   const mineExp = DB.expenses.filter(r => isAdmin || r.userId === currentUser.id).map(r=>({...r, _kind:'despesa'}));
   const mine = [...mineRecs, ...mineExp]
-    .sort((a,b) => new Date(b.dt)-new Date(a.dt))
+    .sort(compareByDateOnly)
     .slice(0, 15);
   if (!mine.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum registro ainda</div><p class="empty-text">Toque em "Novo Registro" para começar</p></div>`;
@@ -2039,7 +2039,7 @@ function applyFilters() {
   if(vId)all=all.filter(r=>r.vehicleId===vId);
   if(from)all=all.filter(r=>localDateKey(r.dt)>=from);
   if(to)all=all.filter(r=>localDateKey(r.dt)<=to);
-  all.sort((a,b)=>new Date(b.dt)-new Date(a.dt));
+  all.sort(compareByDateOnly);
   const totalDespesas = all.filter(r=>r._kind==='despesa').reduce((s,r)=>s+(r.valor||0),0);
   const statKmEl = document.getElementById('statKm');
   if (statKmEl) { statKmEl.textContent = `R$ ${totalDespesas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`; }
@@ -2595,7 +2595,7 @@ function exportData() {
     const u=DB.users.find(x=>x.id===r.userId);
     all.push({dt:r.dt, row:['Despesa',fmtDateTime(r.dt),v?v.nome:'',v?v.placa:'','','',r.valor!=null?String(r.valor).replace('.',','):'',r.categoria||'',u?u.name:r.userId,r.obs||'',r.gps?`${r.gps.lat.toFixed(5)},${r.gps.lng.toFixed(5)}`:'','','']});
   });
-  all.sort((a,b)=>new Date(b.dt)-new Date(a.dt));
+  all.sort(compareByDateOnly);
   const rows=[['Tipo','Data','Veículo','Placa','Km','Horímetro','Valor','Categoria','Colaborador','Obs','GPS','Valor unitário serviço','Receita'], ...all.map(x=>x.row)];
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
@@ -2627,6 +2627,11 @@ function localDateKey(iso){
   const off = d.getTimezoneOffset();
   const local = new Date(d.getTime() - off*60000);
   return local.toISOString().slice(0,10);
+}
+// Ordena registros/despesas apenas pela DATA (dia), ignorando o horário — do mais recente pro mais antigo.
+// Em caso de empate no mesmo dia, mantém a ordem de lançamento (o sort é estável).
+function compareByDateOnly(a, b) {
+  return localDateKey(b.dt).localeCompare(localDateKey(a.dt));
 }
 
 // ── OFFLINE ──

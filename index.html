@@ -689,14 +689,17 @@ input[type="hidden"] { display: none; }
         <div class="stat-sub">no período</div>
       </div>
       <div class="stat-card" style="grid-column:span 2">
-        <div class="stat-label">📈 Receitas</div>
-        <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
-        <div class="stat-sub">no período · calculado por h/km × valor do serviço</div>
-      </div>
-      <div class="stat-card" style="grid-column:span 2" id="statLucroCard">
-        <div class="stat-label">💹 Lucro</div>
-        <div class="stat-value" id="statLucroPct" style="font-size:18px">0%</div>
-        <div class="stat-sub">receita menos despesas, no período</div>
+        <div class="flex-between" style="align-items:flex-start">
+          <div>
+            <div class="stat-label">📈 Receitas</div>
+            <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
+            <div class="stat-sub">no período · calculado por h/km × valor do serviço</div>
+          </div>
+          <div style="text-align:right">
+            <div class="stat-label">Lucro</div>
+            <div class="stat-value" id="statLucroPct" style="font-size:18px">0%</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -722,6 +725,11 @@ input[type="hidden"] { display: none; }
     </div>
 
     <div class="section-header">Histórico de registros</div>
+    <div class="segmented" id="reportTypeTabs" style="display:flex;gap:6px;margin-bottom:12px;background:var(--surface2);border-radius:var(--radius-sm);padding:4px">
+      <button type="button" class="seg-btn active" data-type="all" onclick="setReportType('all')" style="flex:1;border:none;background:var(--surface);color:var(--text);font-weight:600;font-size:13px;padding:8px 4px;border-radius:8px;cursor:pointer;box-shadow:var(--shadow)">Geral</button>
+      <button type="button" class="seg-btn" data-type="medicao" onclick="setReportType('medicao')" style="flex:1;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;padding:8px 4px;border-radius:8px;cursor:pointer">Registros</button>
+      <button type="button" class="seg-btn" data-type="despesa" onclick="setReportType('despesa')" style="flex:1;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;padding:8px 4px;border-radius:8px;cursor:pointer">Despesas</button>
+    </div>
     <div class="card" id="reportsList">
       <div class="empty">
         <div class="empty-icon">📊</div>
@@ -931,7 +939,8 @@ input[type="hidden"] { display: none; }
 </div>
 
 <!-- INPUT DE FOTO OCULTO -->
-<input type="file" id="photoInput" accept="image/*,application/pdf" style="display:none" onchange="handlePhoto(event)">
+<input type="file" id="photoInputCamera" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
+<input type="file" id="photoInputGallery" accept="image/*,application/pdf" multiple style="display:none" onchange="handlePhoto(event)">
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -957,29 +966,43 @@ function isPdfAttachment(url) {
   if (url.startsWith('data:')) return url.startsWith('data:application/pdf');
   return /\.pdf(\?|$)/i.test(url);
 }
-// Miniatura de anexo (foto ou PDF) usada nas telas de confirmação/resumo
-function photoThumbHTML(photo, size) {
-  size = size || 80;
-  if (!photo) return `<div style="width:${size}px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📷</div>`;
-  if (isPdfAttachment(photo)) return `<div style="width:${size}px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📄</div>`;
-  return `<img src="${photo}" style="width:${size}px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`;
+// Normaliza um valor de foto(s) — aceita array novo (photos) ou o campo antigo (photo) — em array.
+function toPhotoArray(photos) {
+  if (Array.isArray(photos)) return photos.filter(Boolean);
+  if (photos) return [photos];
+  return [];
 }
-// Bloco completo do anexo (foto ou PDF) usado nas telas de detalhe de registro/despesa
-function attachmentDetailHTML(photo, filename) {
-  if (!photo) return '<div style="background:var(--surface2);border-radius:12px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:14px;color:var(--text3)">📷 Sem foto registrada</div>';
-  if (isPdfAttachment(photo)) {
-    return `<div style="background:var(--surface2);border-radius:12px;padding:28px 16px;margin-bottom:8px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer" onclick="window.open('${photo}','_blank')">
-      <div style="font-size:40px">📄</div><div style="font-size:14px;font-weight:600;color:var(--text2)">Documento PDF anexado — toque para abrir</div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${filename}')">⬇️ Baixar PDF</button>
-    </div>`;
-  }
-  return `<img src="${photo}" style="width:100%;border-radius:12px;margin-bottom:8px;object-fit:cover;max-height:220px;cursor:pointer" onclick="openFullPhoto(this.src,'${filename}')">
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${filename}')">⬇️ Foto</button>
-      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhotoAsPDF('${photo}','${filename}')">📄 PDF</button>
-    </div>`;
+// Miniatura de anexo (foto ou PDF) usada nas telas de confirmação/resumo. Aceita array de fotos.
+function photoThumbHTML(photos, size) {
+  size = size || 80;
+  const arr = toPhotoArray(photos);
+  if (!arr.length) return `<div style="width:${size}px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📷</div>`;
+  const first = arr[0];
+  const badge = arr.length>1 ? `<div style="position:absolute;top:-6px;right:-6px;background:var(--primary);color:#fff;font-size:11px;font-weight:700;border-radius:99px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px">${arr.length}</div>` : '';
+  const inner = isPdfAttachment(first) ? `<div style="width:${size}px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px">📄</div>` : `<img src="${first}" style="width:${size}px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`;
+  return `<div style="position:relative;display:inline-block">${inner}${badge}</div>`;
+}
+// Bloco completo do anexo (foto(s) ou PDF) usado nas telas de detalhe de registro/despesa.
+// Aceita array de fotos — cada uma pode ser baixada separadamente.
+function attachmentDetailHTML(photos, filename) {
+  const arr = toPhotoArray(photos);
+  if (!arr.length) return '<div style="background:var(--surface2);border-radius:12px;height:100px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-size:14px;color:var(--text3)">📷 Sem foto registrada</div>';
+  return arr.map((photo, i) => {
+    const fname = arr.length>1 ? `${filename}_${i+1}` : filename;
+    if (isPdfAttachment(photo)) {
+      return `<div style="background:var(--surface2);border-radius:12px;padding:28px 16px;margin-bottom:8px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer" onclick="window.open('${photo}','_blank')">
+        <div style="font-size:40px">📄</div><div style="font-size:14px;font-weight:600;color:var(--text2)">${arr.length>1?`Documento ${i+1} de ${arr.length} (PDF) — toque para abrir`:'Documento PDF anexado — toque para abrir'}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${fname}')">⬇️ Baixar PDF</button>
+      </div>`;
+    }
+    return `<img src="${photo}" style="width:100%;border-radius:12px;margin-bottom:8px;object-fit:cover;max-height:220px;cursor:pointer" onclick="openFullPhoto(this.src,'${fname}')">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${fname}')">⬇️ ${arr.length>1?`Foto ${i+1}`:'Foto'}</button>
+        <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhotoAsPDF('${photo}','${fname}')">📄 PDF</button>
+      </div>`;
+  }).join('');
 }
 
 // Sobe uma foto ou PDF (dataURL local) para o Supabase Storage e retorna a URL pública.
@@ -1009,7 +1032,7 @@ async function deletePhotoFromStorage(publicUrl) {
 
 const DB = { vehicles: [], records: [], users: [], expenses: [] };
 let currentUser = null;
-let regState = { step:0, kind:'medicao', vehicle:null, photo:null, km:null, hor:null, valor:null, categoria:'', sig:null, obs:'', gps:null, _ocrRaw:null, _ocrSuggested:null };
+let regState = { step:0, kind:'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, categoria:'', sig:null, obs:'', gps:null, _ocrRaw:null, _ocrSuggested:null };
 let pendingSync = [];
 let pendingSyncExpenses = [];
 
@@ -1074,11 +1097,17 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) sile
 function mapVehicle(v) {
   return { id:v.id, placa:v.placa, nome:v.nome, tipo:v.tipo, medicao:v.medicao, lastKm:v.last_km, lastHor:v.last_hor, ativo:v.ativo };
 }
+// Lê o array de fotos: usa a coluna nova 'fotos' (jsonb) se existir e tiver dados,
+// senão cai para a coluna antiga 'photo_b64' (compatibilidade com registros mais antigos).
+function readPhotos(r) {
+  if (Array.isArray(r.fotos) && r.fotos.length) return r.fotos;
+  return r.photo_b64 ? [r.photo_b64] : [];
+}
 function mapRecord(r) {
-  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, km:r.km, hor:r.hor, obs:r.obs, photo:r.photo_b64||null, gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo, valorUnitario:(r.valor_unitario!=null?Number(r.valor_unitario):null) };
+  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, km:r.km, hor:r.hor, obs:r.obs, photos:readPhotos(r), gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo, valorUnitario:(r.valor_unitario!=null?Number(r.valor_unitario):null) };
 }
 function mapExpense(r) {
-  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, valor:r.valor, categoria:r.categoria||null, obs:r.obs, photo:r.photo_b64||null, gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
+  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, valor:r.valor, categoria:r.categoria||null, obs:r.obs, photos:readPhotos(r), gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
 }
 async function syncPending() {
   if (pendingSync.length) {
@@ -1358,7 +1387,7 @@ function renderHome() {
 
 // ── WIZARD REGISTRO ──
 function startRegister(kind) {
-  regState = { step:0, kind: kind||'medicao', vehicle:null, photo:null, km:null, hor:null, valor:null, categoria:'', obs:'', gps:null, regDate:null, _ocrRaw:null, _ocrSuggested:null };
+  regState = { step:0, kind: kind||'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, categoria:'', obs:'', gps:null, regDate:null, _ocrRaw:null, _ocrSuggested:null };
   // Ativa a tela manualmente sem passar por showScreen (que não conhece 'register')
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-register').classList.add('active');
@@ -1397,21 +1426,32 @@ function renderStep() {
     }
 
   } else if (regState.step===1) {
-    const hasPhoto = !!regState.photo;
-    const isPdf = hasPhoto && isPdfAttachment(regState.photo);
-    const label = isDespesa ? 'Foto ou PDF da despesa' : 'Foto ou PDF do painel';
+    const photos = regState.photos||[];
+    const label = isDespesa ? 'Fotos ou PDFs da despesa' : 'Fotos ou PDFs do painel';
     const hint = isDespesa ? 'Enquadre bem a nota fiscal / comprovante' : 'Enquadre bem o hodômetro / horímetro';
     const placeholderText = isDespesa ? 'Toque para adicionar foto ou PDF da nota / comprovante' : 'Toque para adicionar foto ou PDF do painel';
-    html += `<div class="section-header">${label}</div>
-    <div class="photo-area" onclick="triggerCamera()">
-      ${hasPhoto?(isPdf?`<div class="photo-icon">📄</div><div class="photo-text">PDF anexado</div><div class="text-sm" style="color:var(--primary);font-weight:600">Toque para trocar</div>`:`<img src="${regState.photo}" alt="foto"><div class="photo-overlay"><div style="font-size:32px">🔄</div><div style="font-size:14px;font-weight:600">Trocar foto</div></div>`):
-      `<div class="photo-icon">📷</div><div class="photo-text">${placeholderText}</div><div class="text-sm text-muted">${hint}</div>`}
-    </div>
-    <div style="display:flex;gap:10px;margin-top:12px">
+    if (!photos.length) {
+      html += `<div class="section-header">${label}</div>
+      <div class="photo-area" onclick="triggerCamera()">
+        <div class="photo-icon">📷</div><div class="photo-text">${placeholderText}</div><div class="text-sm text-muted">${hint}</div>
+      </div>`;
+    } else {
+      html += `<div class="section-header">${label} (${photos.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:4px">
+        ${photos.map((p,i)=>`<div style="position:relative;width:90px;height:90px">
+          ${isPdfAttachment(p)?`<div style="width:90px;height:90px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:32px;border:1px solid var(--border)">📄</div>`:`<img src="${p}" style="width:90px;height:90px;object-fit:cover;border-radius:10px;border:1px solid var(--border)">`}
+          <button onclick="removeRegPhoto(${i})" style="position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;background:var(--danger);color:#fff;border:2px solid var(--surface);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+        </div>`).join('')}
+        <div class="photo-area" style="width:90px;height:90px;min-height:0;padding:0;display:flex;align-items:center;justify-content:center" onclick="triggerCamera()">
+          <div style="font-size:28px;color:var(--text3)">+</div>
+        </div>
+      </div>`;
+    }
+    html += `<div style="display:flex;gap:10px;margin-top:12px">
       <button class="btn btn-secondary" style="font-size:15px" onclick="triggerCamera()">📷 Câmera</button>
       <button class="btn btn-secondary" style="font-size:15px" onclick="triggerGallery()">🖼️ Galeria / PDF</button>
     </div>
-    <div class="form-hint" style="margin-top:8px">A foto é opcional. Você pode adicionar pela câmera, escolher uma imagem já salva na galeria (inclusive baixada de outro celular), ou anexar um arquivo PDF.</div>
+    <div class="form-hint" style="margin-top:8px">Você pode adicionar quantas fotos ou PDFs quiser: pela câmera (uma de cada vez), ou escolhendo várias de uma vez na galeria.</div>
     <div style="display:flex;gap:10px;margin-top:12px">
       <button class="btn btn-secondary" onclick="prevStep()">← Voltar</button>
       <button class="btn btn-primary" onclick="nextStep()">Continuar →</button>
@@ -1501,7 +1541,7 @@ function renderStep() {
           <div style="font-size:18px;font-weight:700;margin-top:4px">${v.nome}</div>
           <div class="font-mono text-muted">${v.placa}</div>
         </div>
-        ${photoThumbHTML(regState.photo)}
+        ${photoThumbHTML(regState.photos)}
       </div>
       <div class="divider"></div>
       <table style="width:100%">${vals.join('')}</table>
@@ -1527,7 +1567,7 @@ function renderStep() {
           <div style="font-size:18px;font-weight:700;margin-top:4px">${v.nome}</div>
           <div class="font-mono text-muted">${v.placa}</div>
         </div>
-        ${photoThumbHTML(regState.photo)}
+        ${photoThumbHTML(regState.photos)}
       </div>
       <div class="divider"></div>
       <table style="width:100%">
@@ -1570,40 +1610,50 @@ function triggerGallery() {
   if (!inp) { inp = document.getElementById('photoInput'); }
   if (inp) inp.click();
 }
-function handlePhoto(e) {
-  const file = e.target.files[0]; if(!file) return;
-  // PDF: não passa pelo processamento de imagem (canvas), só converte pra dataURL direto
-  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name||'')) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      regState.photo = reader.result;
-      if (regState.step===1) renderStep();
+// Processa um único arquivo (imagem ou PDF) e resolve com o dataURL pronto para regState.photos
+function processPhotoFile(file) {
+  return new Promise((resolve, reject) => {
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name||'')) {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('pdf'));
+      reader.readAsDataURL(file);
+      return;
+    }
+    // Comprime mantendo boa legibilidade para texto pequeno (notas fiscais, painéis).
+    // Fotos vão para o Supabase Storage (1GB dedicado), não para o banco — folga maior de espaço.
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 1920;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) { if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
+      const canvas = document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
     };
-    reader.onerror = () => showToast('❌ Não foi possível ler o PDF');
-    reader.readAsDataURL(file);
-    e.target.value = '';
-    return;
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img')); };
+    img.src = url;
+  });
+}
+async function handlePhoto(e) {
+  const files = Array.from(e.target.files||[]); if(!files.length) return;
+  if (!regState.photos) regState.photos = [];
+  for (const file of files) {
+    try { regState.photos.push(await processPhotoFile(file)); }
+    catch(err) { showToast('❌ Não foi possível ler o arquivo'); }
   }
-  // Comprime mantendo boa legibilidade para texto pequeno (notas fiscais, painéis).
-  // Fotos vão para o Supabase Storage (1GB dedicado), não para o banco — folga maior de espaço.
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  img.onload = () => {
-    const MAX = 1920;
-    let w = img.width, h = img.height;
-    if (w > MAX || h > MAX) { if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;} }
-    const canvas = document.createElement('canvas');
-    canvas.width=w; canvas.height=h;
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, 0, 0, w, h);
-    regState.photo = canvas.toDataURL('image/jpeg', 0.85);
-    URL.revokeObjectURL(url);
-    if (regState.step===1) renderStep();
-  };
-  img.src = url;
+  if (regState.step===1) renderStep();
   e.target.value = '';
+}
+function removeRegPhoto(i) {
+  regState.photos.splice(i,1);
+  renderStep();
 }
 // Converte string com vírgula ou ponto decimal para Number. Retorna NaN se inválido.
 function parseDecimal(str) {
@@ -1668,7 +1718,7 @@ function saveObs() {
 async function submitRecord() {
   const id='r'+Date.now();
   const recDt = regState.regDate ? new Date(regState.regDate).toISOString() : new Date().toISOString();
-  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,km:regState.km,hor:regState.hor,obs:regState.obs,photo:regState.photo,gps:regState.gps,hasPhoto:!!regState.photo};
+  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,km:regState.km,hor:regState.hor,obs:regState.obs,photos:(regState.photos||[]).slice(),gps:regState.gps,hasPhoto:!!(regState.photos&&regState.photos.length)};
   DB.records.unshift(rec);
   const v=DB.vehicles.find(x=>x.id===regState.vehicle.id);
   if(v){if(rec.km!=null)v.lastKm=rec.km;if(rec.hor!=null)v.lastHor=rec.hor;}
@@ -1698,17 +1748,20 @@ async function submitRecord() {
     if(Object.keys(upd).length) await supa.from('veiculos').update(upd).eq('id',rec.vehicleId);
 
     hideLoading();
-    // Sobe a foto pro Supabase Storage (não pesa o banco) e salva a URL pública no registro
-    if (rec.photo) {
-      showLoading('Enviando foto...');
+    // Sobe as fotos pro Supabase Storage (não pesa o banco) e salva as URLs públicas no registro
+    if (rec.photos.length) {
+      showLoading(rec.photos.length>1?'Enviando fotos...':'Enviando foto...');
       try {
-        const photoUrl = await uploadPhotoToStorage(rec.photo, `registros/${rec.id}.jpg`);
-        const { error: photoErr } = await supa.from('registros').update({ photo_b64: photoUrl }).eq('id', rec.id);
+        const urls = [];
+        for (let i=0;i<rec.photos.length;i++) {
+          urls.push(await uploadPhotoToStorage(rec.photos[i], `registros/${rec.id}_${i}.jpg`));
+        }
+        const { error: photoErr } = await supa.from('registros').update({ fotos: urls, photo_b64: urls[0] }).eq('id', rec.id);
         if (photoErr) throw photoErr;
-        rec.photo = photoUrl;
-        DB.records[0].photo = photoUrl;
+        rec.photos = urls;
+        DB.records[0].photos = urls;
         saveLocal();
-      } catch(e) { /* foto fica só local (base64) até a próxima sincronização poder reenviar */ }
+      } catch(e) { /* fotos ficam só locais (base64) até a próxima sincronização poder reenviar */ }
       hideLoading();
     }
   } catch(e) {
@@ -1731,7 +1784,7 @@ async function submitRecord() {
 async function submitExpense() {
   const id='d'+Date.now();
   const recDt = regState.regDate ? new Date(regState.regDate).toISOString() : new Date().toISOString();
-  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,valor:regState.valor,categoria:regState.categoria||null,obs:regState.obs,photo:regState.photo,gps:regState.gps,hasPhoto:!!regState.photo};
+  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,valor:regState.valor,categoria:regState.categoria||null,obs:regState.obs,photos:(regState.photos||[]).slice(),gps:regState.gps,hasPhoto:!!(regState.photos&&regState.photos.length)};
   DB.expenses.unshift(rec);
   saveLocal();
   showLoading('Salvando na nuvem...');
@@ -1751,17 +1804,20 @@ async function submitExpense() {
     const { error } = await supa.from('despesas').insert(payload);
     if (error) throw new Error(error.message);
     hideLoading();
-    // Sobe a foto pro Supabase Storage (não pesa o banco) e salva a URL pública na despesa
-    if (rec.photo) {
-      showLoading('Enviando foto...');
+    // Sobe as fotos pro Supabase Storage (não pesa o banco) e salva as URLs públicas na despesa
+    if (rec.photos.length) {
+      showLoading(rec.photos.length>1?'Enviando fotos...':'Enviando foto...');
       try {
-        const photoUrl = await uploadPhotoToStorage(rec.photo, `despesas/${rec.id}.jpg`);
-        const { error: photoErr } = await supa.from('despesas').update({ photo_b64: photoUrl }).eq('id', rec.id);
+        const urls = [];
+        for (let i=0;i<rec.photos.length;i++) {
+          urls.push(await uploadPhotoToStorage(rec.photos[i], `despesas/${rec.id}_${i}.jpg`));
+        }
+        const { error: photoErr } = await supa.from('despesas').update({ fotos: urls, photo_b64: urls[0] }).eq('id', rec.id);
         if (photoErr) throw photoErr;
-        rec.photo = photoUrl;
-        DB.expenses[0].photo = photoUrl;
+        rec.photos = urls;
+        DB.expenses[0].photos = urls;
         saveLocal();
-      } catch(e) { /* foto fica só local (base64) até a próxima sincronização poder reenviar */ }
+      } catch(e) { /* fotos ficam só locais (base64) até a próxima sincronização poder reenviar */ }
       hideLoading();
     }
   } catch(e) {
@@ -1815,7 +1871,7 @@ function openEditVehicle(vehicleId) {
   const v=DB.vehicles.find(x=>x.id===vehicleId); if(!v) return;
   document.getElementById('modalVehicleTitle').textContent='Editar Veículo';
   document.getElementById('vEditId').value=vehicleId;
-  document.getElementById('vPlaca').value=v.placa; document.getElementById('vPlaca').setAttribute('disabled','true');
+  document.getElementById('vPlaca').value=v.placa; document.getElementById('vPlaca').removeAttribute('disabled');
   document.getElementById('vNome').value=v.nome;
   document.getElementById('vTipo').value=v.tipo;
   document.getElementById('vMedicao').value=v.medicao||'km';
@@ -1839,10 +1895,11 @@ async function saveVehicle() {
   if(!tipo){showToast('⚠️ Selecione o tipo');return;}
   showLoading('Salvando...');
   if(editId) {
-    // Edição
-    try { await supa.from('veiculos').update({nome,tipo,medicao}).eq('id',editId); } catch(e){}
+    // Edição — placa também pode ser alterada, checando duplicidade com outros veículos
+    if(DB.vehicles.find(v=>v.placa===placa && v.id!==editId)){hideLoading();showToast('⚠️ Placa já cadastrada em outro veículo');return;}
+    try { await supa.from('veiculos').update({nome,tipo,medicao,placa}).eq('id',editId); } catch(e){}
     const v=DB.vehicles.find(x=>x.id===editId);
-    if(v){v.nome=nome;v.tipo=tipo;v.medicao=medicao;}
+    if(v){v.nome=nome;v.tipo=tipo;v.medicao=medicao;v.placa=placa;}
     hideLoading(); saveLocal(); closeModal('modalVehicle'); renderVehicleList(); showToast('✅ Veículo atualizado!');
   } else {
     // Novo
@@ -1960,6 +2017,18 @@ function updateStats() {
   }
   applyFilters();
 }
+let reportTypeFilter = 'all';
+function setReportType(type) {
+  reportTypeFilter = type;
+  document.querySelectorAll('#reportTypeTabs .seg-btn').forEach(btn => {
+    const active = btn.dataset.type === type;
+    btn.classList.toggle('active', active);
+    btn.style.background = active ? 'var(--surface)' : 'transparent';
+    btn.style.color = active ? 'var(--text)' : 'var(--text2)';
+    btn.style.boxShadow = active ? 'var(--shadow)' : 'none';
+  });
+  applyFilters();
+}
 function applyFilters() {
   const vId=document.getElementById('filterVehicle').value;
   const from=document.getElementById('filterFrom').value;
@@ -1976,12 +2045,10 @@ function applyFilters() {
   if (statKmEl) { statKmEl.textContent = `R$ ${totalDespesas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`; }
   const statReceitasEl = document.getElementById('statReceitas');
   const statLucroPctEl = document.getElementById('statLucroPct');
-  const statLucroCardEl = document.getElementById('statLucroCard');
   if (statReceitasEl) {
     if (currentUser && currentUser.role === 'admin') {
       const totalReceitas = all.filter(r=>r._kind==='medicao').reduce((s,r)=>s+calcReceita(r),0);
       statReceitasEl.textContent = `R$ ${totalReceitas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
-      if (statLucroCardEl) statLucroCardEl.style.display = '';
       if (statLucroPctEl) {
         if (totalReceitas > 0) {
           const lucroPct = ((totalReceitas - totalDespesas) / totalReceitas) * 100;
@@ -1994,10 +2061,10 @@ function applyFilters() {
       }
     } else {
       statReceitasEl.closest('.stat-card').style.display = 'none';
-      if (statLucroCardEl) statLucroCardEl.style.display = 'none';
     }
   }
-  renderReportsList(all);
+  const listFiltered = reportTypeFilter==='all' ? all : all.filter(r=>r._kind===reportTypeFilter);
+  renderReportsList(listFiltered);
 }
 function renderReports(){updateStats();}
 function renderReportsList(recs) {
@@ -2054,7 +2121,7 @@ function showRecordDetail(id) {
       <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
       <div><div style="font-size:18px;font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted">${v?v.placa:''}</div></div>
     </div>
-    ${attachmentDetailHTML(r.photo, buildFileName(v,r.dt))}
+    ${attachmentDetailHTML(r.photos, buildFileName(v,r.dt))}
     <table style="width:100%;margin-bottom:12px">${vals.join('')}</table>
     <div class="divider"></div>
     <div class="text-sm text-muted" style="margin-bottom:6px">🕐 ${fmtDateTime(r.dt)}</div>
@@ -2160,7 +2227,7 @@ async function confirmDeleteRecord(id) {
   showLoading('Excluindo...');
   const r = DB.records.find(x=>x.id===id);
   try{await supa.from('registros').delete().eq('id',id);}catch(e){}
-  if (r && r.photo) deletePhotoFromStorage(r.photo); // não bloqueia a exclusão, roda em paralelo
+  if (r && r.photos && r.photos.length) r.photos.forEach(deletePhotoFromStorage); // não bloqueia a exclusão, roda em paralelo
   hideLoading();
   DB.records=DB.records.filter(x=>x.id!==id);
   saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Registro excluído');
@@ -2177,7 +2244,7 @@ function showExpenseDetail(id) {
       <span style="font-size:32px">${v?getEmoji(v.tipo):'🚗'}</span>
       <div><div style="font-size:18px;font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted">${v?v.placa:''}</div></div>
     </div>
-    ${attachmentDetailHTML(r.photo, buildFileName(v,r.dt))}
+    ${attachmentDetailHTML(r.photos, buildFileName(v,r.dt))}
     <table style="width:100%;margin-bottom:12px">
       <tr><td class="text-muted" style="padding:6px 0;">💰 Valor</td><td style="font-weight:700;text-align:right">${r.valor!=null?`R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`:'Não informado'}</td></tr>
       ${r.categoria?`<tr><td class="text-muted" style="padding:6px 0;">🏷️ Categoria</td><td style="font-weight:700;text-align:right">${r.categoria}</td></tr>`:''}
@@ -2204,7 +2271,7 @@ async function confirmDeleteExpense(id) {
   showLoading('Excluindo...');
   const r = DB.expenses.find(x=>x.id===id);
   try{await supa.from('despesas').delete().eq('id',id);}catch(e){}
-  if (r && r.photo) deletePhotoFromStorage(r.photo);
+  if (r && r.photos && r.photos.length) r.photos.forEach(deletePhotoFromStorage);
   hideLoading();
   DB.expenses=DB.expenses.filter(x=>x.id!==id);
   saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Despesa excluída');

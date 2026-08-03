@@ -182,6 +182,15 @@ body { overflow: hidden; }
 select.form-input { cursor: pointer; }
 .form-hint { font-size: 12px; color: var(--text3); margin-top: 4px; }
 .form-error { font-size: 12px; color: var(--danger); margin-top: 4px; display: none; }
+.form-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.form-label-row .form-label { margin-bottom: 0; }
+.kbd-toggle {
+  display: flex; align-items: center; gap: 4px;
+  border: 1.5px solid var(--border); background: var(--surface2);
+  color: var(--text2); font-size: 12px; font-weight: 700;
+  padding: 4px 10px; border-radius: 99px; cursor: pointer;
+}
+.kbd-toggle:active { border-color: var(--primary); color: var(--primary); }
 
 /* ── VEHICLE PICKER ── */
 .vehicle-grid {
@@ -813,12 +822,12 @@ input[type="hidden"] { display: none; }
       </div>
       <input type="hidden" id="adjustVehicleId">
       <div id="adjustKmGroup" class="form-group">
-        <label class="form-label">📍 Quilometragem atual</label>
+        <div class="form-label-row"><label class="form-label">📍 Quilometragem atual</label><button type="button" class="kbd-toggle" onclick="toggleKeyboardMode('adjustKm', this)" title="Toque para usar o teclado alfabético">🔢 123</button></div>
         <input type="text" class="form-input" id="adjustKm" placeholder="Ex: 45820 ou 45820,5" inputmode="decimal">
         <div class="form-hint" id="adjustKmHint"></div>
       </div>
       <div id="adjustHorGroup" class="form-group">
-        <label class="form-label">⏱️ Horímetro atual (horas)</label>
+        <div class="form-label-row"><label class="form-label">⏱️ Horímetro atual (horas)</label><button type="button" class="kbd-toggle" onclick="toggleKeyboardMode('adjustHor', this)" title="Toque para usar o teclado alfabético">🔢 123</button></div>
         <input type="text" class="form-input" id="adjustHor" placeholder="Ex: 3420 ou 3420,5" inputmode="decimal">
         <div class="form-hint" id="adjustHorHint"></div>
       </div>
@@ -1464,7 +1473,7 @@ function renderStep() {
     html += `<div class="section-header">Informe as leituras</div>`;
     if (v.medicao==='km'||v.medicao==='ambos') {
       html += `<div class="form-group">
-        <label class="form-label">📍 Quilometragem atual</label>
+        <div class="form-label-row"><label class="form-label">📍 Quilometragem atual</label>${kbdToggleBtn('inputKm')}</div>
         <input type="text" class="form-input" id="inputKm" value="${regState.km!=null?String(regState.km).replace('.',','):''}" placeholder="Ex: 45820 ou 45820,5" min="${v.lastKm||0}" inputmode="decimal" oninput="validateKm(this)">
         <div class="form-hint">${v.lastKm!=null?`Último: ${Number(v.lastKm).toLocaleString('pt-BR')} km`:'Primeira leitura'}</div>
         <div class="form-error" id="kmError">⚠️ Valor menor que o último registrado!</div>
@@ -1472,7 +1481,7 @@ function renderStep() {
     }
     if (v.medicao==='hor'||v.medicao==='ambos') {
       html += `<div class="form-group">
-        <label class="form-label">⏱️ Horímetro atual (horas)</label>
+        <div class="form-label-row"><label class="form-label">⏱️ Horímetro atual (horas)</label>${kbdToggleBtn('inputHor')}</div>
         <input type="text" class="form-input" id="inputHor" value="${regState.hor!=null?String(regState.hor).replace('.',','):''}" placeholder="Ex: 3420 ou 3420,5" min="${v.lastHor||0}" inputmode="decimal" oninput="validateHor(this)">
         <div class="form-hint">${v.lastHor!=null?`Último: ${Number(v.lastHor).toLocaleString('pt-BR')} h`:'Primeira leitura'}</div>
         <div class="form-error" id="horError">⚠️ Valor menor que o último registrado!</div>
@@ -1490,7 +1499,7 @@ function renderStep() {
   } else if (regState.step===2 && isDespesa) {
     html += `<div class="section-header">Informe o valor da despesa</div>
     <div class="form-group">
-      <label class="form-label">💰 Valor (R$)</label>
+      <div class="form-label-row"><label class="form-label">💰 Valor (R$)</label>${kbdToggleBtn('inputValor')}</div>
       <input type="text" class="form-input" id="inputValor" value="${regState.valor!=null?String(regState.valor).replace('.',','):''}" placeholder="Ex: 150,00" inputmode="decimal">
       <div class="form-hint">Use vírgula para os centavos. Ex: 150,00</div>
       <div class="form-error" id="valorError">⚠️ Valor inválido!</div>
@@ -1600,6 +1609,28 @@ function selectVehicle(id) {
   if (btn) { btn.removeAttribute('disabled'); btn.style.opacity='1'; }
 }
 
+// ── ALTERNAR TIPO DE TECLADO (numérico ↔ alfabético) ──
+// Campos numéricos (km, horímetro, valor) abrem por padrão com teclado numérico,
+// mas o usuário pode tocar no botão pra trocar pro teclado alfabético e vice-versa.
+function toggleKeyboardMode(inputId, btn) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  const isNumeric = el.getAttribute('inputmode') === 'decimal';
+  if (isNumeric) {
+    el.setAttribute('inputmode','text');
+    if (btn) { btn.innerHTML = '🔤 ABC'; btn.title = 'Toque para voltar ao teclado numérico'; }
+  } else {
+    el.setAttribute('inputmode','decimal');
+    if (btn) { btn.innerHTML = '🔢 123'; btn.title = 'Toque para usar o teclado alfabético'; }
+  }
+  // No iOS/Safari a troca de teclado só é aplicada tirando e recolocando o foco no campo
+  const wasFocused = document.activeElement === el;
+  el.blur();
+  if (wasFocused) setTimeout(() => el.focus(), 30);
+}
+function kbdToggleBtn(inputId) {
+  return `<button type="button" class="kbd-toggle" onclick="toggleKeyboardMode('${inputId}', this)" title="Toque para usar o teclado alfabético">🔢 123</button>`;
+}
 // ── FOTO ──
 function triggerPhoto() { triggerCamera(); }
 function triggerCamera() {
@@ -2304,11 +2335,11 @@ function editRecord(id) {
       <input type="datetime-local" class="form-input" id="editRecordDate" value="${dtLocal}">
     </div>
     ${(v&&(v.medicao==='km'||v.medicao==='ambos'))?`<div class="form-group">
-      <label class="form-label">📍 Quilometragem</label>
+      <div class="form-label-row"><label class="form-label">📍 Quilometragem</label>${kbdToggleBtn('editRecordKm')}</div>
       <input type="text" class="form-input" id="editRecordKm" value="${r.km!=null?String(r.km).replace('.',','):''}" placeholder="Ex: 45820,5" inputmode="decimal">
     </div>`:''}
     ${(v&&(v.medicao==='hor'||v.medicao==='ambos'))?`<div class="form-group">
-      <label class="form-label">⏱️ Horímetro</label>
+      <div class="form-label-row"><label class="form-label">⏱️ Horímetro</label>${kbdToggleBtn('editRecordHor')}</div>
       <input type="text" class="form-input" id="editRecordHor" value="${r.hor!=null?String(r.hor).replace('.',','):''}" placeholder="Ex: 3420,5" inputmode="decimal">
     </div>`:''}
     <div class="form-group">
@@ -2316,7 +2347,7 @@ function editRecord(id) {
       <textarea class="form-input" id="editRecordObs" rows="3" style="resize:none">${r.obs||''}</textarea>
     </div>
     ${currentUser.role==='admin'?`<div class="form-group">
-      <label class="form-label">💲 Valor do serviço (R$ por ${(v&&v.medicao==='km')?'km':'h'})</label>
+      <div class="form-label-row"><label class="form-label">💲 Valor do serviço (R$ por ${(v&&v.medicao==='km')?'km':'h'})</label>${kbdToggleBtn('editRecordValor')}</div>
       <input type="text" class="form-input" id="editRecordValor" value="${r.valorUnitario!=null?String(r.valorUnitario).replace('.',','):''}" placeholder="Ex: 120,00" inputmode="decimal">
       <div class="form-hint">🔒 Visível somente para administradores. A receita é calculada automaticamente: (diferença de h/km em relação ao lançamento anterior) × este valor. Deixe em branco para não gerar receita.</div>
     </div>`:''}
@@ -2386,7 +2417,7 @@ function editExpense(id) {
       <input type="datetime-local" class="form-input" id="editExpenseDate" value="${dtLocal}">
     </div>
     <div class="form-group">
-      <label class="form-label">💰 Valor (R$)</label>
+      <div class="form-label-row"><label class="form-label">💰 Valor (R$)</label>${kbdToggleBtn('editExpenseValor')}</div>
       <input type="text" class="form-input" id="editExpenseValor" value="${r.valor!=null?String(r.valor).replace('.',','):''}" placeholder="Ex: 150,00" inputmode="decimal">
     </div>
     <div class="form-group">

@@ -1527,6 +1527,7 @@ function renderStep() {
     </div>
     <div class="section-header">Observações (opcional)</div>
     <div class="form-group">
+      <div class="form-label-row" style="justify-content:flex-end">${kbdToggleBtn('inputObs','text')}</div>
       <textarea class="form-input" id="inputObs" rows="3" placeholder="${isDespesa?'Ex: Troca de óleo, posto Shell BR-...':'Ex: Pneu calibrado, veículo em bom estado...'}" style="resize:none">${regState.obs}</textarea>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px">
@@ -1628,8 +1629,11 @@ function toggleKeyboardMode(inputId, btn) {
   el.blur();
   if (wasFocused) setTimeout(() => el.focus(), 30);
 }
-function kbdToggleBtn(inputId) {
-  return `<button type="button" class="kbd-toggle" onclick="toggleKeyboardMode('${inputId}', this)" title="Toque para usar o teclado alfabético">🔢 123</button>`;
+function kbdToggleBtn(inputId, startMode) {
+  const numeric = startMode !== 'text';
+  const label = numeric ? '🔢 123' : '🔤 ABC';
+  const title = numeric ? 'Toque para usar o teclado alfabético' : 'Toque para usar o teclado numérico';
+  return `<button type="button" class="kbd-toggle" onclick="toggleKeyboardMode('${inputId}', this)" title="${title}">${label}</button>`;
 }
 // ── FOTO ──
 function triggerPhoto() { triggerCamera(); }
@@ -2343,7 +2347,7 @@ function editRecord(id) {
       <input type="text" class="form-input" id="editRecordHor" value="${r.hor!=null?String(r.hor).replace('.',','):''}" placeholder="Ex: 3420,5" inputmode="decimal">
     </div>`:''}
     <div class="form-group">
-      <label class="form-label">💬 Observação</label>
+      <div class="form-label-row"><label class="form-label">💬 Observação</label>${kbdToggleBtn('editRecordObs','text')}</div>
       <textarea class="form-input" id="editRecordObs" rows="3" style="resize:none">${r.obs||''}</textarea>
     </div>
     ${currentUser.role==='admin'?`<div class="form-group">
@@ -2428,7 +2432,7 @@ function editExpense(id) {
       <input type="hidden" id="editExpenseCategoria" value="${r.categoria||''}">
     </div>
     <div class="form-group">
-      <label class="form-label">💬 Observação</label>
+      <div class="form-label-row"><label class="form-label">💬 Observação</label>${kbdToggleBtn('editExpenseObs','text')}</div>
       <textarea class="form-input" id="editExpenseObs" rows="3" style="resize:none">${r.obs||''}</textarea>
     </div>
     <button class="btn btn-primary" onclick="saveEditExpense()">✓ Salvar alterações</button>

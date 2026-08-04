@@ -678,19 +678,14 @@ input[type="hidden"] { display: none; }
   <div class="content">
     <!-- Dashboard stats -->
     <div class="stats-grid mb-12">
-      <div class="stat-card">
-        <div class="stat-label">🚗 Veículos</div>
-        <div class="stat-value" id="statVehicles">0</div>
-        <div class="stat-sub">cadastrados</div>
+      <div class="stat-card stat-receita">
+        <div class="stat-label">📈 Receitas</div>
+        <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
+        <div class="stat-sub">no período</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">💰 Despesas</div>
         <div class="stat-value" id="statKm" style="font-size:18px">0</div>
-        <div class="stat-sub">no período</div>
-      </div>
-      <div class="stat-card stat-receita">
-        <div class="stat-label">📈 Receitas</div>
-        <div class="stat-value" id="statReceitas" style="font-size:18px">0</div>
         <div class="stat-sub">no período</div>
       </div>
       <div class="stat-card stat-receita">
@@ -2029,7 +2024,6 @@ async function confirmDeleteVehicle(vehicleId) {
 
 // ── RELATÓRIOS ──
 function updateStats() {
-  document.getElementById('statVehicles').textContent=DB.vehicles.length;
   document.getElementById('statKm').textContent=0;
   const sel=document.getElementById('filterVehicle');
   const prevSelectedVehicle=sel.value;

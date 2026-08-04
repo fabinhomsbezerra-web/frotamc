@@ -683,16 +683,6 @@ input[type="hidden"] { display: none; }
         <div class="stat-sub">cadastrados</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">📋 Hoje</div>
-        <div class="stat-value" id="statToday">0</div>
-        <div class="stat-sub">registros</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">⚠️ Sem registro</div>
-        <div class="stat-value" id="statNoReg">0</div>
-        <div class="stat-sub">veículos</div>
-      </div>
-      <div class="stat-card">
         <div class="stat-label">💰 Despesas</div>
         <div class="stat-value" id="statKm" style="font-size:18px">0</div>
         <div class="stat-sub">no período</div>
@@ -2037,11 +2027,7 @@ async function confirmDeleteVehicle(vehicleId) {
 
 // ── RELATÓRIOS ──
 function updateStats() {
-  const today=new Date().toDateString();
   document.getElementById('statVehicles').textContent=DB.vehicles.length;
-  document.getElementById('statToday').textContent=DB.records.filter(r=>new Date(r.dt).toDateString()===today).length;
-  const withRec=new Set(DB.records.map(r=>r.vehicleId));
-  document.getElementById('statNoReg').textContent=DB.vehicles.filter(v=>!withRec.has(v.id)).length;
   document.getElementById('statKm').textContent=0;
   const sel=document.getElementById('filterVehicle');
   const prevSelectedVehicle=sel.value;

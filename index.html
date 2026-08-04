@@ -670,6 +670,7 @@ input[type="hidden"] { display: none; }
   <div class="header">
     <div class="header-logo">📊 Relatórios</div>
     <div style="flex:1"></div>
+    <button class="btn-icon stat-receita" onclick="generateVehicleReportPDF()" title="Relatório geral em PDF">📄</button>
     <button class="btn-icon" onclick="exportData()" title="Exportar">📤</button>
     <button class="btn-icon" onclick="manualSync()" title="Sincronizar">🔄</button>
     <button class="btn-icon" onclick="confirmLogout()" title="Sair">🚪</button>
@@ -945,6 +946,7 @@ input[type="hidden"] { display: none; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
 <script>
 const SUPA_URL = 'https://odxpsonlpznrinbuktri.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9keHBzb25scHpucmluYnVrdHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDQ0NDIsImV4cCI6MjA5NzEyMDQ0Mn0.smy-2kUMSetaaC7SITqfEZG6ZwT7g0-FkDn1i_FZKUg';
@@ -2609,6 +2611,176 @@ function selectTag(el,group) {
   }
   if(group==='medicao'){const map={'📍 Quilometragem':'km','⏱️ Horímetro':'hor','📍⏱️ Ambos':'ambos'};document.getElementById('vMedicao').value=map[el.textContent.trim()]||'km';}
   if(group==='opRole')document.getElementById('opRole').value=el.dataset.val||'colaborador';
+}
+
+// ── RELATÓRIO GERAL EM PDF (todos os veículos, no padrão da planilha) ──
+// Usa o mesmo período selecionado nos filtros da tela de Relatórios (De/Até),
+// mas sempre para TODOS os veículos, independente do filtro de veículo selecionado.
+function fmtNumBR(v, casas) {
+  if (v == null) return '';
+  return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: casas != null ? casas : 1 });
+}
+function fmtMoneyBR(v) {
+  const n = Number(v) || 0;
+  return `${n < 0 ? '-' : ''}R$ ${Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+}
+// Monta a descrição de um lançamento de receita (medição), no mesmo espírito da planilha:
+// "INI. x FIN. y (delta UN)" + observação, se houver.
+function buildRecordDesc(r) {
+  const b = getReceitaBreakdown(r);
+  let desc;
+  if (b && b.prevValor != null) {
+    const un = b.usaHor ? 'H' : 'KM';
+    const atual = b.usaHor ? r.hor : r.km;
+    desc = `SERVIÇO (INI. ${fmtNumBR(b.prevValor)} FIN. ${fmtNumBR(atual)}) ${fmtNumBR(b.delta)}${un}`;
+  } else {
+    desc = 'SERVIÇO';
+  }
+  if (r.obs) desc += ' — ' + r.obs;
+  return desc;
+}
+function buildExpenseDesc(r) {
+  let desc = (r.categoria || 'DESPESA').toUpperCase();
+  if (r.obs) desc += ' — ' + r.obs;
+  return desc;
+}
+async function generateVehicleReportPDF() {
+  if (!currentUser || currentUser.role !== 'admin') { showToast('⚠️ Disponível apenas para administradores'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { showToast('❌ Biblioteca de PDF não carregou — verifique sua conexão'); return; }
+  const fromStr = document.getElementById('filterFrom').value;
+  const toStr = document.getElementById('filterTo').value;
+  showLoading('Gerando relatório...');
+  await new Promise(r => setTimeout(r, 30)); // deixa o loading renderizar antes do trabalho pesado
+
+  // Coleta lançamentos de receita (medições com valor unitário definido) e despesas, no período, de TODOS os veículos
+  const entradasPorVeiculo = {};
+  const saidasPorVeiculo = {};
+  const lancamentosPorVeiculo = {}; // {vehicleId: [{dt, desc, entrada, saida}]}
+  DB.vehicles.forEach(v => { lancamentosPorVeiculo[v.id] = []; });
+
+  DB.records.forEach(r => {
+    const key = localDateKey(r.dt);
+    if (fromStr && key < fromStr) return;
+    if (toStr && key > toStr) return;
+    const receita = calcReceita(r);
+    if (receita <= 0) return; // só entra no relatório financeiro quem gerou receita
+    entradasPorVeiculo[r.vehicleId] = (entradasPorVeiculo[r.vehicleId] || 0) + receita;
+    if (!lancamentosPorVeiculo[r.vehicleId]) lancamentosPorVeiculo[r.vehicleId] = [];
+    lancamentosPorVeiculo[r.vehicleId].push({ dt: r.dt, desc: buildRecordDesc(r), entrada: receita, saida: 0 });
+  });
+  DB.expenses.forEach(r => {
+    const key = localDateKey(r.dt);
+    if (fromStr && key < fromStr) return;
+    if (toStr && key > toStr) return;
+    const valor = Number(r.valor) || 0;
+    saidasPorVeiculo[r.vehicleId] = (saidasPorVeiculo[r.vehicleId] || 0) + valor;
+    if (!lancamentosPorVeiculo[r.vehicleId]) lancamentosPorVeiculo[r.vehicleId] = [];
+    lancamentosPorVeiculo[r.vehicleId].push({ dt: r.dt, desc: buildExpenseDesc(r), entrada: 0, saida: valor });
+  });
+
+  const veiculosComMovimento = DB.vehicles
+    .filter(v => (entradasPorVeiculo[v.id] || saidasPorVeiculo[v.id]))
+    .sort((a, b) => (b.nome > a.nome ? -1 : 1));
+
+  if (!veiculosComMovimento.length) { hideLoading(); showToast('⚠️ Nenhum lançamento no período selecionado'); return; }
+
+  const totalEntradas = Object.values(entradasPorVeiculo).reduce((s, x) => s + x, 0);
+  const totalSaidas = Object.values(saidasPorVeiculo).reduce((s, x) => s + x, 0);
+  const resultadoLiquido = totalEntradas - totalSaidas;
+  const margemLiquida = totalEntradas > 0 ? (resultadoLiquido / totalEntradas) * 100 : 0;
+
+  const periodoLabel = (fromStr || toStr)
+    ? `PERÍODO: ${fromStr ? fmtDate(fromStr + 'T12:00:00') : '—'} A ${toStr ? fmtDate(toStr + 'T12:00:00') : '—'}`
+    : 'PERÍODO: TODOS OS REGISTROS';
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const margin = 40;
+
+  // ── PÁGINA 1: RESUMO GERAL ──
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(20, 20, 30);
+  doc.text('RESUMO GERAL - CONTROLE DOS VEÍCULOS', pageW / 2, 50, { align: 'center' });
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.setTextColor(90, 90, 100);
+  doc.text(periodoLabel, pageW / 2, 68, { align: 'center' });
+
+  // Cards de totais
+  const cardW = (pageW - margin * 2 - 3 * 10) / 4;
+  const cardY = 88, cardH = 46;
+  const cards = [
+    { label: 'TOTAL DE ENTRADAS', value: fmtMoneyBR(totalEntradas), color: [37, 99, 235] },
+    { label: 'TOTAL DE SAÍDAS', value: fmtMoneyBR(totalSaidas), color: [220, 38, 38] },
+    { label: 'RESULTADO LÍQUIDO', value: fmtMoneyBR(resultadoLiquido), color: [22, 101, 52] },
+    { label: 'MARGEM LÍQUIDA', value: `${margemLiquida.toFixed(1)}%`, color: [180, 130, 10] }
+  ];
+  cards.forEach((c, i) => {
+    const x = margin + i * (cardW + 10);
+    doc.setFillColor(...c.color);
+    doc.roundedRect(x, cardY, cardW, cardH, 4, 4, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    doc.text(c.label, x + cardW / 2, cardY + 16, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text(c.value, x + cardW / 2, cardY + 33, { align: 'center' });
+  });
+
+  // Tabela por veículo
+  const bodyRows = veiculosComMovimento.map(v => {
+    const ent = entradasPorVeiculo[v.id] || 0;
+    const sai = saidasPorVeiculo[v.id] || 0;
+    return [v.nome, fmtMoneyBR(ent), fmtMoneyBR(sai), fmtMoneyBR(ent - sai)];
+  });
+  bodyRows.push(['TOTAL GERAL', fmtMoneyBR(totalEntradas), fmtMoneyBR(totalSaidas), fmtMoneyBR(resultadoLiquido)]);
+
+  doc.autoTable({
+    startY: cardY + cardH + 24,
+    margin: { left: margin, right: margin },
+    head: [['VEÍCULO', 'ENTRADAS', 'SAÍDAS', 'RESULTADO']],
+    body: bodyRows,
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [237, 242, 250] },
+    columnStyles: { 1: { textColor: [37, 99, 235] }, 2: { textColor: [220, 38, 38] } },
+    didParseCell: (data) => {
+      if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [220, 226, 236]; }
+    }
+  });
+
+  // ── UMA PÁGINA POR VEÍCULO: extrato detalhado ──
+  veiculosComMovimento.forEach(v => {
+    doc.addPage();
+    const ent = entradasPorVeiculo[v.id] || 0;
+    const sai = saidasPorVeiculo[v.id] || 0;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(20, 20, 30);
+    doc.text(`VEÍCULO: ${v.nome.toUpperCase()}`, margin, 46);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90, 90, 100);
+    doc.text(periodoLabel, margin, 62);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+    doc.setTextColor(37, 99, 235); doc.text(`ENTRADAS ${fmtMoneyBR(ent)}`, pageW - margin, 40, { align: 'right' });
+    doc.setTextColor(220, 38, 38); doc.text(`SAÍDAS ${fmtMoneyBR(sai)}`, pageW - margin, 54, { align: 'right' });
+    doc.setTextColor(22, 101, 52); doc.text(`RESULTADO ${fmtMoneyBR(ent - sai)}`, pageW - margin, 68, { align: 'right' });
+
+    const lancamentos = (lancamentosPorVeiculo[v.id] || []).slice().sort((a, b) => new Date(a.dt) - new Date(b.dt));
+    let acumulado = 0;
+    const rows = lancamentos.map(l => {
+      acumulado += l.entrada - l.saida;
+      return [fmtDate(l.dt), l.desc, l.entrada ? fmtMoneyBR(l.entrada) : '', l.saida ? fmtMoneyBR(l.saida) : '', fmtMoneyBR(acumulado)];
+    });
+    doc.autoTable({
+      startY: 82,
+      margin: { left: margin, right: margin },
+      head: [['DIA', 'DESCRIÇÃO', 'ENTRADAS', 'SAÍDAS', 'ACUMULADO']],
+      body: rows,
+      styles: { font: 'helvetica', fontSize: 8, cellPadding: 4 },
+      headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [237, 242, 250] },
+      columnStyles: { 0: { cellWidth: 60 }, 2: { textColor: [37, 99, 235] }, 3: { textColor: [220, 38, 38] } }
+    });
+  });
+
+  const periodoArquivo = `${fromStr || 'inicio'}_a_${toStr || 'hoje'}`;
+  doc.save(`frotamc_relatorio_geral_${periodoArquivo}.pdf`);
+  hideLoading();
+  showToast('✅ Relatório PDF gerado!');
 }
 
 // ── EXPORT CSV ──

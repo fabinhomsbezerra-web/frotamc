@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="theme-color" content="#1A56DB">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -2673,6 +2673,18 @@ window.addEventListener('online', async () => {
 });
 window.addEventListener('offline',()=>showToast('📵 Sem internet — modo offline ativado'));
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ── TECLADO NÃO COBRIR O CAMPO ──
+// Sempre que um campo de texto ganha foco (o teclado abre), rola a tela pra deixar
+// o campo visível acima do teclado, em qualquer tela do app (login, wizard, modais etc).
+document.addEventListener('focusin', (e) => {
+  const el = e.target;
+  if (!el.matches('input, textarea, select')) return;
+  if (el.type === 'hidden') return;
+  setTimeout(() => {
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 300); // dá tempo do teclado terminar de abrir antes de rolar
+});
 
 // ── INIT ──
 document.addEventListener('DOMContentLoaded',()=>{

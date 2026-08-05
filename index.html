@@ -654,6 +654,11 @@ input[type="hidden"] { display: none; }
   </div>
   <div class="content">
     <div id="operatorListEl"></div>
+    <div class="section-header" style="margin-top:24px;display:flex;align-items:center;justify-content:space-between">
+      <span>🏷️ Categorias de Despesa</span>
+      <button class="btn-icon" onclick="openAddCategory()" title="Adicionar categoria">➕</button>
+    </div>
+    <div id="categoryListEl"></div>
   </div>
   <nav class="bottom-nav">
     <button class="nav-item" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
@@ -935,6 +940,27 @@ input[type="hidden"] { display: none; }
   </div>
 </div>
 
+<!-- ════════════════════════════
+     MODAL: Categoria de Despesa
+════════════════════════════ -->
+<div class="modal-overlay" id="modalCategory">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header flex-between">
+      <div class="modal-title" id="modalCategoryTitle">Nova Categoria</div>
+      <button class="btn-icon" onclick="closeModal('modalCategory')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="catEditId">
+      <div class="form-group">
+        <label class="form-label">Nome da categoria</label>
+        <input type="text" class="form-input" id="catNome" placeholder="Ex: Lubrificante">
+      </div>
+      <button class="btn btn-primary" onclick="saveCategory()">Salvar Categoria ✓</button>
+    </div>
+  </div>
+</div>
+
 <!-- INPUT DE FOTO OCULTO -->
 <input type="file" id="photoInputCamera" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
 <input type="file" id="photoInputGallery" accept="image/*,application/pdf" multiple style="display:none" onchange="handlePhoto(event)">
@@ -1028,7 +1054,14 @@ async function deletePhotoFromStorage(publicUrl) {
   } catch(e) { /* não crítico */ }
 }
 
-const DB = { vehicles: [], records: [], users: [], expenses: [] };
+const DB = { vehicles: [], records: [], users: [], expenses: [], categorias: [] };
+// Categorias padrão — usadas como fallback caso a tabela 'categorias_despesa' ainda não exista
+// no Supabase ou esteja vazia (ex: primeiro carregamento, ou app offline sem cache local).
+const DEFAULT_CATEGORIAS = ['Combustível','Manutenção','Pneu','Peças','Pedágio','Lavagem','Multa','Outro'];
+// Retorna a lista de nomes de categoria a ser usada nas telas (cadastrada no Supabase, com fallback pro padrão).
+function getCategorias() {
+  return DB.categorias.length ? DB.categorias.map(c => c.nome) : DEFAULT_CATEGORIAS;
+}
 let currentUser = null;
 let regState = { step:0, kind:'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, categoria:'', sig:null, obs:'', gps:null, _ocrRaw:null, _ocrSuggested:null };
 let pendingSync = [];
@@ -1037,7 +1070,7 @@ let pendingSyncExpenses = [];
 // ── PERSISTÊNCIA LOCAL ──
 function saveLocal() {
   try {
-    localStorage.setItem('fc_cache', JSON.stringify({ vehicles: DB.vehicles, records: DB.records, users: DB.users, expenses: DB.expenses }));
+    localStorage.setItem('fc_cache', JSON.stringify({ vehicles: DB.vehicles, records: DB.records, users: DB.users, expenses: DB.expenses, categorias: DB.categorias }));
     localStorage.setItem('fc_pending', JSON.stringify(pendingSync));
     localStorage.setItem('fc_pending_expenses', JSON.stringify(pendingSyncExpenses));
   } catch(e) {}
@@ -1045,7 +1078,7 @@ function saveLocal() {
 function loadLocal() {
   try {
     const c = localStorage.getItem('fc_cache');
-    if (c) { const d = JSON.parse(c); DB.vehicles=d.vehicles||[]; DB.records=d.records||[]; DB.users=d.users||[]; DB.expenses=d.expenses||[]; }
+    if (c) { const d = JSON.parse(c); DB.vehicles=d.vehicles||[]; DB.records=d.records||[]; DB.users=d.users||[]; DB.expenses=d.expenses||[]; DB.categorias=d.categorias||[]; }
     const p = localStorage.getItem('fc_pending');
     if (p) pendingSync = JSON.parse(p);
     const pe = localStorage.getItem('fc_pending_expenses');
@@ -1059,16 +1092,20 @@ async function syncFromCloud(silent) {
   let anyOk = false;
   try {
     // Cada query é independente — falha em uma não cancela as outras
-    const [vsRes, usRes, rsRes, esRes] = await Promise.allSettled([
+    const [vsRes, usRes, rsRes, esRes, csRes] = await Promise.allSettled([
       supa.from('veiculos').select('*').order('criado_em'),
       supa.from('usuarios').select('*').order('name'),
       supa.from('registros').select('*').order('dt', { ascending: false }).limit(500),
-      supa.from('despesas').select('*').order('dt', { ascending: false }).limit(500)
+      supa.from('despesas').select('*').order('dt', { ascending: false }).limit(500),
+      supa.from('categorias_despesa').select('*').order('criado_em')
     ]);
     if (vsRes.status==='fulfilled' && vsRes.value.data) { DB.vehicles = vsRes.value.data.map(mapVehicle); anyOk=true; }
     if (usRes.status==='fulfilled' && usRes.value.data) { DB.users = usRes.value.data; anyOk=true; }
     if (rsRes.status==='fulfilled' && rsRes.value.data) { DB.records = rsRes.value.data.map(mapRecord); anyOk=true; }
     if (esRes.status==='fulfilled' && esRes.value.data) { DB.expenses = esRes.value.data.map(mapExpense); anyOk=true; }
+    // Categorias: se a tabela ainda não existir no Supabase, a query falha silenciosamente
+    // (Promise.allSettled) e o app segue usando DEFAULT_CATEGORIAS ou o cache local.
+    if (csRes.status==='fulfilled' && csRes.value.data) { DB.categorias = csRes.value.data; anyOk=true; }
     // Reintegra pendentes locais que ainda não foram para nuvem
     if (pendingSync.length) {
       const cloudIds = new Set(DB.records.map(r => r.id));
@@ -1352,7 +1389,7 @@ function renderHome() {
   const mineRecs = DB.records.filter(r => isAdmin || r.userId === currentUser.id).map(r=>({...r, _kind:'medicao'}));
   const mineExp = DB.expenses.filter(r => isAdmin || r.userId === currentUser.id).map(r=>({...r, _kind:'despesa'}));
   const mine = [...mineRecs, ...mineExp]
-    .sort(compareByDateOnly)
+    .sort(compareByEntry)
     .slice(0, 15);
   if (!mine.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum registro ainda</div><p class="empty-text">Toque em "Novo Registro" para começar</p></div>`;
@@ -1494,7 +1531,7 @@ function renderStep() {
     <div class="form-group">
       <label class="form-label">🏷️ Categoria (opcional)</label>
       <div class="tag-row" id="catTags">
-        ${['Combustível','Manutenção','Pneu','Peças','Pedágio','Lavagem','Multa','Outro'].map(c=>`<span class="tag ${regState.categoria===c?'selected':''}" onclick="selectExpenseCategory(this,'${c}')">${c}</span>`).join('')}
+        ${getCategorias().map(c=>`<span class="tag ${regState.categoria===c?'selected':''}" onclick="selectExpenseCategory(this,'${c}')">${c}</span>`).join('')}
       </div>
     </div>
     <div class="form-hint" style="margin-bottom:8px">O valor e a categoria são opcionais — preencha o que estiver disponível.</div>
@@ -2058,7 +2095,7 @@ function applyFilters() {
   if(vId)all=all.filter(r=>r.vehicleId===vId);
   if(from)all=all.filter(r=>localDateKey(r.dt)>=from);
   if(to)all=all.filter(r=>localDateKey(r.dt)<=to);
-  all.sort(compareByDateOnly);
+  all.sort(compareByEntry);
   const totalDespesas = all.filter(r=>r._kind==='despesa').reduce((s,r)=>s+(r.valor||0),0);
   const statKmEl = document.getElementById('statKm');
   if (statKmEl) { statKmEl.textContent = `R$ ${totalDespesas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`; }
@@ -2391,7 +2428,7 @@ function editExpense(id) {
   const v=DB.vehicles.find(x=>x.id===r.vehicleId);
   document.getElementById('editRecordTitle').textContent='✏️ Editar despesa';
   const dtLocal = nowLocalForInput(new Date(r.dt));
-  const cats=['Combustível','Manutenção','Pneu','Peças','Pedágio','Lavagem','Multa','Outro'];
+  const cats=getCategorias();
   document.getElementById('editRecordContent').innerHTML=`
     <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
       <span style="font-size:28px">${v?getEmoji(v.tipo):'🚗'}</span>
@@ -2585,6 +2622,88 @@ function renderOperatorList() {
       </div>
     </div>`;
   }).join('')+`</div>`;
+  renderCategoryList();
+}
+
+// ── CATEGORIAS DE DESPESA ──
+function renderCategoryList() {
+  const el = document.getElementById('categoryListEl'); if (!el) return;
+  const cats = DB.categorias.length ? DB.categorias : DEFAULT_CATEGORIAS.map(nome => ({ id: null, nome }));
+  if (!cats.length) { el.innerHTML = `<div class="card"><div class="empty"><div class="empty-icon">🏷️</div><div class="empty-title">Nenhuma categoria</div></div></div>`; return; }
+  el.innerHTML = `<div class="card">` + cats.map(c => {
+    const despCount = c.id ? DB.expenses.filter(r => r.categoria === c.nome).length : 0;
+    const isDefault = !c.id; // categoria padrão (ainda não existe tabela/registro no Supabase)
+    return `<div class="list-item">
+      <div class="list-icon" style="font-size:20px;background:var(--primary-light)">🏷️</div>
+      <div class="list-content">
+        <div class="list-title">${c.nome}</div>
+        <div class="list-sub">${isDefault ? 'Categoria padrão' : `${despCount} despesa(s)`}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        ${isDefault ? '' : `<button class="btn-icon" onclick="openEditCategory('${c.id}')" style="font-size:16px">✏️</button>
+        <button class="btn-icon" onclick="promptDeleteCategory('${c.id}')" style="font-size:16px;background:var(--danger-bg);color:var(--danger)">🗑️</button>`}
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+function openAddCategory() {
+  document.getElementById('modalCategoryTitle').textContent = 'Nova Categoria';
+  document.getElementById('catEditId').value = '';
+  document.getElementById('catNome').value = '';
+  openModal('modalCategory');
+}
+function openEditCategory(id) {
+  const c = DB.categorias.find(x => x.id === id); if (!c) return;
+  document.getElementById('modalCategoryTitle').textContent = 'Editar Categoria';
+  document.getElementById('catEditId').value = c.id;
+  document.getElementById('catNome').value = c.nome;
+  openModal('modalCategory');
+}
+async function saveCategory() {
+  const editId = document.getElementById('catEditId').value;
+  const nome = document.getElementById('catNome').value.trim();
+  if (!nome) { showToast('⚠️ Informe o nome da categoria'); return; }
+  const dup = DB.categorias.some(c => c.nome.toLowerCase() === nome.toLowerCase() && c.id !== editId);
+  if (dup) { showToast('⚠️ Já existe uma categoria com esse nome'); return; }
+  showLoading('Salvando...');
+  try {
+    if (editId) {
+      const oldCat = DB.categorias.find(c => c.id === editId);
+      const { error } = await supa.from('categorias_despesa').update({ nome }).eq('id', editId);
+      if (error) throw new Error(error.message);
+      // Atualiza também as despesas já lançadas com o nome antigo, pra manter consistência
+      if (oldCat && oldCat.nome !== nome) {
+        await supa.from('despesas').update({ categoria: nome }).eq('categoria', oldCat.nome);
+        DB.expenses.forEach(r => { if (r.categoria === oldCat.nome) r.categoria = nome; });
+      }
+      if (oldCat) oldCat.nome = nome;
+    } else {
+      const id = 'c' + Date.now();
+      const { error } = await supa.from('categorias_despesa').insert({ id, nome });
+      if (error) throw new Error(error.message);
+      DB.categorias.push({ id, nome, criado_em: new Date().toISOString() });
+    }
+    saveLocal(); hideLoading(); closeModal('modalCategory');
+    showToast(editId ? '✅ Categoria atualizada!' : '✅ Categoria cadastrada!');
+    renderCategoryList();
+  } catch (e) {
+    hideLoading();
+    showToast('❌ Erro ao salvar: ' + (e.message || 'verifique se a tabela categorias_despesa existe no Supabase'), 5000);
+  }
+}
+function promptDeleteCategory(id) {
+  const c = DB.categorias.find(x => x.id === id); if (!c) return;
+  const despCount = DB.expenses.filter(r => r.categoria === c.nome).length;
+  document.getElementById('deleteRecordInfo').innerHTML = `<strong>${c.nome}</strong><br><span style="color:var(--text3)">${despCount} despesa(s) já usam essa categoria — não serão excluídas, apenas ficarão sem categoria vinculada aqui.</span>`;
+  document.getElementById('confirmDeleteBtn').onclick = () => confirmDeleteCategory(id);
+  openModal('modalConfirmDelete');
+}
+async function confirmDeleteCategory(id) {
+  showLoading('Excluindo...');
+  try { await supa.from('categorias_despesa').delete().eq('id', id); } catch (e) {}
+  hideLoading();
+  DB.categorias = DB.categorias.filter(x => x.id !== id);
+  saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Categoria excluída'); renderCategoryList();
 }
 
 // ── TAG SELECTOR ──
@@ -2828,6 +2947,20 @@ function localDateKey(iso){
 // Em caso de empate no mesmo dia, mantém a ordem de lançamento (o sort é estável).
 function compareByDateOnly(a, b) {
   return localDateKey(b.dt).localeCompare(localDateKey(a.dt));
+}
+// Extrai o instante real em que o registro foi CRIADO no sistema (não confundir com o campo "dt",
+// que é a data/hora do evento e pode ter sido editada/backdated pelo usuário).
+// Os ids são gerados como 'r'+Date.now(), 'd'+Date.now() etc — ou seja, já carregam o timestamp
+// de criação em milissegundos. Isso permite ordenar pela sequência real de lançamento.
+function entryTimestamp(r) {
+  const m = /^[a-z](\d+)$/i.exec(r.id || '');
+  if (m) return Number(m[1]);
+  return new Date(r.dt).getTime() || 0; // fallback pra registros com id fora do padrão
+}
+// Ordena pela SEQUÊNCIA DE LANÇAMENTO (o mais recente lançado sempre primeiro),
+// independente da hora escolhida no campo "dt".
+function compareByEntry(a, b) {
+  return entryTimestamp(b) - entryTimestamp(a);
 }
 
 // ── OFFLINE ──

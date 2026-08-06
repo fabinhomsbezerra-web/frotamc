@@ -542,8 +542,8 @@ input[type="hidden"] { display: none; }
      TELA DE LOGIN
 ════════════════════════════ -->
 <div id="screen-login" class="screen login-screen active">
-  <div class="login-logo">🚛</div>
-  <div class="login-brand">FrotaMC</div>
+  <div class="login-logo" id="loginLogoEl">🚛</div>
+  <div class="login-brand" id="loginBrandEl">FrotaMC</div>
   <p class="login-tagline">Controle de Frota</p>
   <div class="login-card">
     <div class="form-group">
@@ -570,7 +570,7 @@ input[type="hidden"] { display: none; }
 <div id="screen-home" class="screen">
   <div class="header">
     <div>
-      <div class="header-logo">🚛 FrotaMC</div>
+      <div class="header-logo" id="headerLogoEl">🚛 FrotaMC</div>
       <div id="headerUser" class="text-sm text-muted"></div>
     </div>
     <div style="flex:1"></div>
@@ -615,6 +615,33 @@ input[type="hidden"] { display: none; }
     <button class="btn-icon" onclick="manualSync()" title="Sincronizar">🔄</button>
   </div>
   <div class="content">
+    <div class="section-header">🎨 Aparência do App</div>
+    <div class="card" style="padding:16px;margin-bottom:20px">
+      <div class="form-group">
+        <label class="form-label">Nome do app</label>
+        <input type="text" class="form-input" id="cfgAppName" placeholder="Ex: FrotaMC" maxlength="30">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ícone (emoji)</label>
+        <input type="text" class="form-input" id="cfgAppEmoji" placeholder="Ex: 🚛" maxlength="4" style="font-size:22px" oninput="if(this.value)document.getElementById('cfgLogoPreview').src='';">
+        <div class="form-hint">Usado se nenhuma logo (imagem) for definida abaixo.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Logo (imagem)</label>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <div style="width:64px;height:64px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden">
+            <img id="cfgLogoPreview" src="" style="max-width:100%;max-height:100%;object-fit:contain;display:none" onload="this.style.display='block'" onerror="this.style.display='none'">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;flex:1">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('cfgLogoInput').click()">🖼️ Escolher imagem</button>
+            <button type="button" class="btn btn-outline btn-sm" onclick="removeCfgLogo()">✕ Remover logo</button>
+          </div>
+        </div>
+        <input type="file" id="cfgLogoInput" accept="image/*" style="display:none" onchange="handleCfgLogoUpload(event)">
+        <div class="form-hint">Se definida, a logo substitui o emoji no login e no topo do app.</div>
+      </div>
+      <button class="btn btn-primary" onclick="saveAppConfig()">✓ Salvar aparência</button>
+    </div>
     <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
       <span>🏷️ Categorias de Despesa</span>
       <button class="btn-icon" onclick="openAddCategory()" title="Adicionar categoria">➕</button>
@@ -979,6 +1006,8 @@ input[type="hidden"] { display: none; }
 <!-- INPUT DE FOTO OCULTO -->
 <input type="file" id="photoInputCamera" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
 <input type="file" id="photoInputGallery" accept="image/*,application/pdf" multiple style="display:none" onchange="handlePhoto(event)">
+<input type="file" id="editPhotoInputCamera" accept="image/*" capture="environment" style="display:none" onchange="handleEditPhoto(event)">
+<input type="file" id="editPhotoInputGallery" accept="image/*,application/pdf" multiple style="display:none" onchange="handleEditPhoto(event)">
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -1070,12 +1099,89 @@ async function deletePhotoFromStorage(publicUrl) {
 }
 
 const DB = { vehicles: [], records: [], users: [], expenses: [], categorias: [] };
+let appConfig = { name: 'FrotaMC', emoji: '🚛', logo: null };
+let cfgLogoPending; // undefined = sem alteração pendente; null = remover; dataURL = nova logo escolhida
 // Categorias padrão — usadas como fallback caso a tabela 'categorias_despesa' ainda não exista
 // no Supabase ou esteja vazia (ex: primeiro carregamento, ou app offline sem cache local).
 const DEFAULT_CATEGORIAS = ['Combustível','Manutenção','Pneu','Peças','Pedágio','Lavagem','Multa','Outro'];
 // Retorna a lista de nomes de categoria a ser usada nas telas (cadastrada no Supabase, com fallback pro padrão).
 function getCategorias() {
   return DB.categorias.length ? DB.categorias.map(c => c.nome) : DEFAULT_CATEGORIAS;
+}
+// ── APARÊNCIA DO APP (nome / ícone / logo) ──
+// Aplica appConfig (nome, emoji, logo) no login e no cabeçalho do app, e no título da aba.
+function applyAppConfig() {
+  const name = appConfig.name || 'FrotaMC';
+  const emoji = appConfig.emoji || '🚛';
+  const logo = appConfig.logo || null;
+  document.title = name;
+  const loginLogoEl = document.getElementById('loginLogoEl');
+  const loginBrandEl = document.getElementById('loginBrandEl');
+  const headerLogoEl = document.getElementById('headerLogoEl');
+  if (loginBrandEl) loginBrandEl.textContent = name;
+  if (loginLogoEl) loginLogoEl.innerHTML = logo ? `<img src="${logo}" style="width:56px;height:56px;object-fit:contain;border-radius:14px">` : emoji;
+  if (headerLogoEl) headerLogoEl.innerHTML = logo ? `<img src="${logo}" style="width:26px;height:26px;object-fit:contain;border-radius:6px;vertical-align:middle;margin-right:6px">${name}` : `${emoji} ${name}`;
+}
+// Popula o formulário de aparência na tela de Configurações com os valores atuais.
+function renderAppConfigForm() {
+  const nameEl = document.getElementById('cfgAppName');
+  const emojiEl = document.getElementById('cfgAppEmoji');
+  const preview = document.getElementById('cfgLogoPreview');
+  if (!nameEl) return;
+  cfgLogoPending = undefined;
+  nameEl.value = appConfig.name || 'FrotaMC';
+  emojiEl.value = appConfig.emoji || '🚛';
+  if (preview) { preview.src = appConfig.logo || ''; preview.style.display = appConfig.logo ? 'block' : 'none'; }
+}
+// Comprime a imagem escolhida (logo pequena, cabe direto numa coluna de texto no Supabase)
+function handleCfgLogoUpload(e) {
+  const file = (e.target.files||[])[0]; if (!file) return;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const MAX = 300;
+    let w = img.width, h = img.height;
+    if (w > MAX || h > MAX) { if (w>h) { h=Math.round(h*MAX/w); w=MAX; } else { w=Math.round(w*MAX/h); h=MAX; } }
+    const canvas = document.createElement('canvas');
+    canvas.width=w; canvas.height=h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    const dataUrl = canvas.toDataURL('image/png');
+    cfgLogoPending = dataUrl;
+    const preview = document.getElementById('cfgLogoPreview');
+    if (preview) { preview.src = dataUrl; preview.style.display='block'; }
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); showToast('❌ Não foi possível ler a imagem'); };
+  img.src = url;
+  e.target.value = '';
+}
+function removeCfgLogo() {
+  cfgLogoPending = null;
+  const preview = document.getElementById('cfgLogoPreview');
+  if (preview) { preview.src=''; preview.style.display='none'; }
+}
+async function saveAppConfig() {
+  const nameEl = document.getElementById('cfgAppName');
+  const emojiEl = document.getElementById('cfgAppEmoji');
+  const name = (nameEl.value||'').trim() || 'FrotaMC';
+  const emoji = (emojiEl.value||'').trim() || '🚛';
+  const logo = cfgLogoPending !== undefined ? cfgLogoPending : (appConfig.logo || null);
+  showLoading('Salvando...');
+  appConfig = { name, emoji, logo };
+  applyAppConfig();
+  saveLocal();
+  try {
+    const { error } = await supa.from('app_config').upsert({ id:'default', name, emoji, logo });
+    if (error) throw error;
+    hideLoading();
+    showToast('✅ Aparência atualizada!');
+  } catch(e) {
+    hideLoading();
+    showToast('💾 Salvo neste dispositivo (crie a tabela app_config no Supabase para sincronizar)', 6000);
+  }
+  cfgLogoPending = undefined;
 }
 let currentUser = null;
 let regState = { step:0, kind:'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, categoria:'', sig:null, obs:'', gps:null, _ocrRaw:null, _ocrSuggested:null };
@@ -1088,6 +1194,7 @@ function saveLocal() {
     localStorage.setItem('fc_cache', JSON.stringify({ vehicles: DB.vehicles, records: DB.records, users: DB.users, expenses: DB.expenses, categorias: DB.categorias }));
     localStorage.setItem('fc_pending', JSON.stringify(pendingSync));
     localStorage.setItem('fc_pending_expenses', JSON.stringify(pendingSyncExpenses));
+    localStorage.setItem('fc_appConfig', JSON.stringify(appConfig));
   } catch(e) {}
 }
 function loadLocal() {
@@ -1098,7 +1205,10 @@ function loadLocal() {
     if (p) pendingSync = JSON.parse(p);
     const pe = localStorage.getItem('fc_pending_expenses');
     if (pe) pendingSyncExpenses = JSON.parse(pe);
+    const ac = localStorage.getItem('fc_appConfig');
+    if (ac) appConfig = Object.assign({name:'FrotaMC',emoji:'🚛',logo:null}, JSON.parse(ac));
   } catch(e) {}
+  applyAppConfig();
 }
 
 // ── SYNC SUPABASE ──
@@ -1107,12 +1217,13 @@ async function syncFromCloud(silent) {
   let anyOk = false;
   try {
     // Cada query é independente — falha em uma não cancela as outras
-    const [vsRes, usRes, rsRes, esRes, csRes] = await Promise.allSettled([
+    const [vsRes, usRes, rsRes, esRes, csRes, acRes] = await Promise.allSettled([
       supa.from('veiculos').select('*').order('criado_em'),
       supa.from('usuarios').select('*').order('name'),
       supa.from('registros').select('*').order('dt', { ascending: false }).limit(500),
       supa.from('despesas').select('*').order('dt', { ascending: false }).limit(500),
-      supa.from('categorias_despesa').select('*').order('criado_em')
+      supa.from('categorias_despesa').select('*').order('criado_em'),
+      supa.from('app_config').select('*').eq('id','default').maybeSingle()
     ]);
     if (vsRes.status==='fulfilled' && vsRes.value.data) { DB.vehicles = vsRes.value.data.map(mapVehicle); anyOk=true; }
     if (usRes.status==='fulfilled' && usRes.value.data) { DB.users = usRes.value.data; anyOk=true; }
@@ -1121,6 +1232,14 @@ async function syncFromCloud(silent) {
     // Categorias: se a tabela ainda não existir no Supabase, a query falha silenciosamente
     // (Promise.allSettled) e o app segue usando DEFAULT_CATEGORIAS ou o cache local.
     if (csRes.status==='fulfilled' && csRes.value.data) { DB.categorias = csRes.value.data; anyOk=true; }
+    // Config de aparência (nome/ícone/logo): se a tabela 'app_config' ainda não existir ou
+    // não tiver a linha 'default', mantém o que já está em appConfig (padrão ou cache local).
+    if (acRes.status==='fulfilled' && acRes.value.data) {
+      const d = acRes.value.data;
+      appConfig = { name: d.name || 'FrotaMC', emoji: d.emoji || '🚛', logo: d.logo || null };
+      applyAppConfig();
+      anyOk = true;
+    }
     // Reintegra pendentes locais que ainda não foram para nuvem
     if (pendingSync.length) {
       const cloudIds = new Set(DB.records.map(r => r.id));
@@ -1358,7 +1477,7 @@ function showScreen(name, scrollTop) {
   if (name==='reports') { renderReports(); updateStats(); markReportsSeen(); }
   if (name==='vehicles') renderVehicleList();
   if (name==='operators') renderOperatorList();
-  if (name==='settings') renderCategoryList();
+  if (name==='settings') { renderCategoryList(); renderAppConfigForm(); }
   if (name==='home') renderHome();
   updateNotifBadge();
 }
@@ -2358,18 +2477,85 @@ async function confirmDeleteExpense(id) {
   refreshCurrentScreen();
 }
 
+// ── EDIÇÃO DE FOTOS (apenas admin, dentro da edição de registro/despesa) ──
+// Estado temporário enquanto o modal de edição está aberto.
+let editPhotosState = [];     // array atual de fotos (URLs existentes e/ou novos dataURLs)
+let editPhotosOriginal = [];  // snapshot das URLs originais — usado pra saber o que foi removido
+let editPhotosKind = null;    // 'record' | 'expense'
+
+function triggerEditCamera() { const inp=document.getElementById('editPhotoInputCamera'); if(inp) inp.click(); }
+function triggerEditGallery() { const inp=document.getElementById('editPhotoInputGallery'); if(inp) inp.click(); }
+
+async function handleEditPhoto(e) {
+  const files = Array.from(e.target.files||[]); if(!files.length) return;
+  for (const file of files) {
+    try { editPhotosState.push(await processPhotoFile(file)); }
+    catch(err) { showToast('❌ Não foi possível ler o arquivo'); }
+  }
+  renderEditPhotosBlock();
+  e.target.value = '';
+}
+function removeEditPhoto(i) {
+  editPhotosState.splice(i,1);
+  renderEditPhotosBlock();
+}
+// Monta o HTML do bloco de gerenciamento de fotos (thumbnails + botões de adicionar)
+function editPhotosBlockHTML() {
+  const thumbs = editPhotosState.map((p,i) => {
+    const inner = isPdfAttachment(p)
+      ? `<div style="width:100%;height:80px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:26px">📄</div>`
+      : `<img src="${p}" style="width:100%;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">`;
+    return `<div style="position:relative">
+      ${inner}
+      <button type="button" onclick="removeEditPhoto(${i})" style="position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;background:var(--danger,#ef4444);color:#fff;border:2px solid var(--surface);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">✕</button>
+    </div>`;
+  }).join('');
+  return `<div class="form-group">
+    <label class="form-label">📷 Fotos / PDFs</label>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:10px;margin-bottom:10px">${thumbs}</div>
+    <div style="display:flex;gap:8px">
+      <button type="button" class="btn btn-secondary btn-sm" style="flex:1" onclick="triggerEditCamera()">📷 Câmera</button>
+      <button type="button" class="btn btn-secondary btn-sm" style="flex:1" onclick="triggerEditGallery()">🖼️ Galeria</button>
+    </div>
+    <div class="form-hint" style="margin-top:6px">Toque no ✕ para remover uma foto. As alterações só são salvas ao tocar em "Salvar alterações".</div>
+  </div>`;
+}
+function renderEditPhotosBlock() {
+  const el = document.getElementById('editPhotosContainer');
+  if (el) el.innerHTML = editPhotosBlockHTML();
+}
+// Faz o diff entre editPhotosOriginal e editPhotosState: sobe as novas (dataURL) pro Storage,
+// devolve a lista final de URLs e a lista de URLs antigas que devem ser removidas do Storage.
+async function resolveEditPhotos(id, folder) {
+  const removed = editPhotosOriginal.filter(orig => !editPhotosState.includes(orig));
+  const finalUrls = [];
+  for (let i=0;i<editPhotosState.length;i++) {
+    const p = editPhotosState[i];
+    if (p.startsWith('data:')) {
+      finalUrls.push(await uploadPhotoToStorage(p, `${folder}/${id}_edit_${Date.now()}_${i}.jpg`));
+    } else {
+      finalUrls.push(p);
+    }
+  }
+  return { finalUrls, removed };
+}
+
 // ── EDIÇÃO DE LANÇAMENTOS (apenas admin) ──
 function editRecord(id) {
   const r=DB.records.find(x=>x.id===id); if(!r) return;
   const v=DB.vehicles.find(x=>x.id===r.vehicleId);
   document.getElementById('editRecordTitle').textContent='✏️ Editar registro';
   const dtLocal = nowLocalForInput(new Date(r.dt));
+  editPhotosState = toPhotoArray(r.photos).slice();
+  editPhotosOriginal = toPhotoArray(r.photos).slice();
+  editPhotosKind = 'record';
   document.getElementById('editRecordContent').innerHTML=`
     <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
       <span style="font-size:28px">${v?getEmoji(v.tipo):'🚗'}</span>
       <div><div style="font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted text-sm">${v?v.placa:''}</div></div>
     </div>
     <input type="hidden" id="editRecordId" value="${r.id}">
+    <div id="editPhotosContainer">${editPhotosBlockHTML()}</div>
     <div class="form-group">
       <label class="form-label">📅 Data e hora</label>
       <input type="datetime-local" class="form-input" id="editRecordDate" value="${dtLocal}">
@@ -2417,9 +2603,15 @@ async function saveEditRecord() {
   const newObs = obsEl.value.trim();
   showLoading('Salvando...');
   try {
-    const { error } = await supa.from('registros').update({ km:newKm, hor:newHor, dt:newDt, obs:newObs||null, valor_unitario:newValorUnitario }).eq('id', id);
+    let finalUrls = editPhotosOriginal, removed = [];
+    if (editPhotosKind==='record') {
+      const resolved = await resolveEditPhotos(id, 'registros');
+      finalUrls = resolved.finalUrls; removed = resolved.removed;
+    }
+    const { error } = await supa.from('registros').update({ km:newKm, hor:newHor, dt:newDt, obs:newObs||null, valor_unitario:newValorUnitario, fotos:finalUrls, photo_b64:finalUrls[0]||null, has_photo:finalUrls.length>0 }).eq('id', id);
     if (error) throw new Error(error.message);
-    r.km=newKm; r.hor=newHor; r.dt=newDt; r.obs=newObs; r.valorUnitario=newValorUnitario;
+    r.km=newKm; r.hor=newHor; r.dt=newDt; r.obs=newObs; r.valorUnitario=newValorUnitario; r.photos=finalUrls; r.hasPhoto=finalUrls.length>0;
+    removed.forEach(deletePhotoFromStorage); // limpa do Storage as fotos removidas, sem bloquear
     // Atualiza referência de última leitura do veículo, caso este seja o registro mais recente
     const v=DB.vehicles.find(x=>x.id===r.vehicleId);
     if (v) {
@@ -2446,12 +2638,16 @@ function editExpense(id) {
   document.getElementById('editRecordTitle').textContent='✏️ Editar despesa';
   const dtLocal = nowLocalForInput(new Date(r.dt));
   const cats=getCategorias();
+  editPhotosState = toPhotoArray(r.photos).slice();
+  editPhotosOriginal = toPhotoArray(r.photos).slice();
+  editPhotosKind = 'expense';
   document.getElementById('editRecordContent').innerHTML=`
     <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
       <span style="font-size:28px">${v?getEmoji(v.tipo):'🚗'}</span>
       <div><div style="font-weight:700">${v?v.nome:'—'}</div><div class="font-mono text-muted text-sm">${v?v.placa:''}</div></div>
     </div>
     <input type="hidden" id="editExpenseId" value="${r.id}">
+    <div id="editPhotosContainer">${editPhotosBlockHTML()}</div>
     <div class="form-group">
       <label class="form-label">📅 Data e hora</label>
       <input type="datetime-local" class="form-input" id="editExpenseDate" value="${dtLocal}">
@@ -2496,9 +2692,15 @@ async function saveEditExpense() {
   const newObs = obsEl.value.trim();
   showLoading('Salvando...');
   try {
-    const { error } = await supa.from('despesas').update({ valor:newValor, categoria:newCat, dt:newDt, obs:newObs||null }).eq('id', id);
+    let finalUrls = editPhotosOriginal, removed = [];
+    if (editPhotosKind==='expense') {
+      const resolved = await resolveEditPhotos(id, 'despesas');
+      finalUrls = resolved.finalUrls; removed = resolved.removed;
+    }
+    const { error } = await supa.from('despesas').update({ valor:newValor, categoria:newCat, dt:newDt, obs:newObs||null, fotos:finalUrls, photo_b64:finalUrls[0]||null, has_photo:finalUrls.length>0 }).eq('id', id);
     if (error) throw new Error(error.message);
-    r.valor=newValor; r.categoria=newCat; r.dt=newDt; r.obs=newObs;
+    r.valor=newValor; r.categoria=newCat; r.dt=newDt; r.obs=newObs; r.photos=finalUrls; r.hasPhoto=finalUrls.length>0;
+    removed.forEach(deletePhotoFromStorage); // limpa do Storage as fotos removidas, sem bloquear
     saveLocal(); hideLoading(); closeModal('modalEditRecord');
     showToast('✅ Despesa atualizada!');
     refreshCurrentScreen();

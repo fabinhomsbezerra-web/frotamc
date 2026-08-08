@@ -580,10 +580,10 @@ input[type="hidden"] { display: none; }
     <button class="btn-icon" onclick="confirmLogout()" title="Sair">🚪</button>
   </div>
   <div class="content">
-    <button class="btn btn-primary" onclick="startRegister('medicao')" style="font-size:20px;padding:22px;margin-bottom:12px;">
+    <button class="btn btn-primary creator-only" onclick="startRegister('medicao')" style="font-size:20px;padding:22px;margin-bottom:12px;">
       ➕ Novo Registro
     </button>
-    <button class="btn btn-accent" onclick="startRegister('despesa')" style="font-size:17px;padding:16px;margin-bottom:20px;">
+    <button class="btn btn-accent creator-only" onclick="startRegister('despesa')" style="font-size:17px;padding:16px;margin-bottom:20px;">
       💰 Nova Despesa
     </button>
 
@@ -598,9 +598,9 @@ input[type="hidden"] { display: none; }
   </div>
   <nav class="bottom-nav" id="nav-home">
     <button class="nav-item active" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
-    <button class="nav-item admin-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
+    <button class="nav-item staff-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
     <button class="nav-item admin-only" onclick="showScreen('operators')"><span class="nav-icon">👥</span> Operadores</button>
-    <button class="nav-item admin-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios<span class="badge reports-badge" style="display:none">0</span></button>
+    <button class="nav-item staff-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios<span class="badge reports-badge" style="display:none">0</span></button>
   </nav>
 </div>
 
@@ -682,9 +682,9 @@ input[type="hidden"] { display: none; }
   </div>
   <nav class="bottom-nav">
     <button class="nav-item" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
-    <button class="nav-item active admin-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
+    <button class="nav-item active staff-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
     <button class="nav-item admin-only" onclick="showScreen('operators')"><span class="nav-icon">👥</span> Operadores</button>
-    <button class="nav-item admin-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios<span class="badge reports-badge" style="display:none">0</span></button>
+    <button class="nav-item staff-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios<span class="badge reports-badge" style="display:none">0</span></button>
   </nav>
 </div>
 
@@ -704,9 +704,9 @@ input[type="hidden"] { display: none; }
   </div>
   <nav class="bottom-nav">
     <button class="nav-item" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
-    <button class="nav-item admin-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
+    <button class="nav-item staff-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
     <button class="nav-item active admin-only" onclick="showScreen('operators')"><span class="nav-icon">👥</span> Operadores</button>
-    <button class="nav-item admin-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios<span class="badge reports-badge" style="display:none">0</span></button>
+    <button class="nav-item staff-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios<span class="badge reports-badge" style="display:none">0</span></button>
   </nav>
 </div>
 
@@ -784,9 +784,9 @@ input[type="hidden"] { display: none; }
   </div>
   <nav class="bottom-nav">
     <button class="nav-item" onclick="showScreen('home')"><span class="nav-icon">🏠</span> Início</button>
-    <button class="nav-item" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
+    <button class="nav-item staff-only" onclick="showScreen('vehicles')"><span class="nav-icon">🚗</span> Veículos</button>
     <button class="nav-item admin-only" onclick="showScreen('operators')"><span class="nav-icon">👥</span> Operadores</button>
-    <button class="nav-item active" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios<span class="badge reports-badge" style="display:none">0</span></button>
+    <button class="nav-item active staff-only" onclick="showScreen('reports')"><span class="nav-icon">📊</span> Relatórios<span class="badge reports-badge" style="display:none">0</span></button>
   </nav>
 </div>
 
@@ -969,8 +969,10 @@ input[type="hidden"] { display: none; }
         <label class="form-label">Perfil</label>
         <div class="tag-row">
           <span class="tag selected" onclick="selectTag(this,'opRole')" data-val="colaborador">👷 Colaborador</span>
+          <span class="tag" onclick="selectTag(this,'opRole')" data-val="visualizador">👁️ Visualizador</span>
           <span class="tag" onclick="selectTag(this,'opRole')" data-val="admin">🔑 Administrador</span>
         </div>
+        <div class="form-hint" style="margin-top:6px">Visualizador só acompanha os lançamentos — não pode registrar, editar nem excluir nada.</div>
         <input type="hidden" id="opRole" value="colaborador">
       </div>
       <div class="form-group" id="opVehiclesGroup">
@@ -1385,7 +1387,11 @@ async function doLogin() {
 async function afterLogin(scrollTop) {
   document.getElementById('headerUser').textContent = `👤 ${currentUser.name}`;
   document.getElementById('addVehicleBtn').style.display = currentUser.role!=='admin' ? 'none' : '';
-  document.querySelectorAll('.admin-only').forEach(el => { el.style.display = currentUser.role==='admin' ? '' : 'none'; });
+  const role = currentUser.role;
+  const isStaffView = role==='admin' || role==='visualizador'; // pode acompanhar Veículos e Relatórios
+  document.querySelectorAll('.admin-only').forEach(el => { el.style.display = role==='admin' ? '' : 'none'; });
+  document.querySelectorAll('.staff-only').forEach(el => { el.style.display = isStaffView ? '' : 'none'; });
+  document.querySelectorAll('.creator-only').forEach(el => { el.style.display = role==='visualizador' ? 'none' : ''; });
   // Mostra a Home imediatamente com dados locais já disponíveis
   showScreen('home', scrollTop);
   try {
@@ -1450,7 +1456,7 @@ function recordCreatedAtMs(r){
 }
 function updateNotifBadge(){
   const badges = document.querySelectorAll('.reports-badge');
-  if (!currentUser || currentUser.role!=='admin') { badges.forEach(b=>b.style.display='none'); return; }
+  if (!currentUser || !(currentUser.role==='admin'||currentUser.role==='visualizador')) { badges.forEach(b=>b.style.display='none'); return; }
   const lastSeenMs = Date.parse(getLastSeenReports());
   const count = DB.records.filter(r=>recordCreatedAtMs(r)>lastSeenMs).length + DB.expenses.filter(r=>recordCreatedAtMs(r)>lastSeenMs).length;
   badges.forEach(b=>{
@@ -1461,7 +1467,12 @@ function updateNotifBadge(){
 
 // ── NAVEGAÇÃO ──
 function showScreen(name, scrollTop) {
-  if ((name==='operators'||name==='reports'||name==='settings') && currentUser && currentUser.role!=='admin') {
+  const role = currentUser && currentUser.role;
+  const isStaffView = role==='admin' || role==='visualizador';
+  if ((name==='operators'||name==='settings') && currentUser && role!=='admin') {
+    showToast('⛔ Apenas administradores'); return;
+  }
+  if ((name==='vehicles'||name==='reports') && currentUser && !isStaffView) {
     showToast('⛔ Apenas administradores'); return;
   }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -1524,13 +1535,14 @@ function goBack() { showScreen('home'); }
 function renderHome() {
   const el = document.getElementById('recentList');
   const isAdmin = currentUser.role === 'admin';
-  const mineRecs = DB.records.filter(r => isAdmin || r.userId === currentUser.id).map(r=>({...r, _kind:'medicao'}));
-  const mineExp = DB.expenses.filter(r => isAdmin || r.userId === currentUser.id).map(r=>({...r, _kind:'despesa'}));
+  const seesAll = isAdmin || currentUser.role === 'visualizador';
+  const mineRecs = DB.records.filter(r => seesAll || r.userId === currentUser.id).map(r=>({...r, _kind:'medicao'}));
+  const mineExp = DB.expenses.filter(r => seesAll || r.userId === currentUser.id).map(r=>({...r, _kind:'despesa'}));
   const mine = [...mineRecs, ...mineExp]
     .sort(compareByEntry)
     .slice(0, 15);
   if (!mine.length) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum registro ainda</div><p class="empty-text">Toque em "Novo Registro" para começar</p></div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum registro ainda</div><p class="empty-text">${currentUser.role==='visualizador'?'Nenhum lançamento para acompanhar ainda':'Toque em "Novo Registro" para começar'}</p></div>`;
     return;
   }
   el.innerHTML = mine.map(r => {
@@ -1551,7 +1563,7 @@ function renderHome() {
       <div class="list-content">
         <div class="list-title">${v?v.nome:'—'}</div>
         <div class="list-sub">${vals.join(' · ')} ${r.obs?'· 💬':''}</div>
-        ${isAdmin ? `<div class="text-xs text-muted">👤 ${u?u.name:r.userId}</div>` : ''}
+        ${seesAll ? `<div class="text-xs text-muted">👤 ${u?u.name:r.userId}</div>` : ''}
       </div>
       <div class="list-meta">${fmtDate(r.dt)}<br><span class="text-xs">${r.hasPhoto?'📷':''}</span></div>
     </div>`;
@@ -2303,7 +2315,7 @@ function showRecordDetail(id) {
   const vals=[];
   if(r.km!=null)vals.push(`<tr><td class="text-muted" style="padding:6px 0;">📍 Quilometragem</td><td style="font-weight:700;text-align:right">${Number(r.km).toLocaleString('pt-BR')} km</td></tr>`);
   if(r.hor!=null)vals.push(`<tr><td class="text-muted" style="padding:6px 0;">⏱️ Horímetro</td><td style="font-weight:700;text-align:right">${Number(r.hor).toLocaleString('pt-BR')} h</td></tr>`);
-  const canDelete=currentUser.role==='admin'||r.userId===currentUser.id;
+  const canDelete=currentUser.role!=='visualizador'&&(currentUser.role==='admin'||r.userId===currentUser.id);
   const isAdmin=currentUser.role==='admin';
   if (isAdmin && r.valorUnitario!=null) {
     const receita = calcReceita(r);
@@ -2438,7 +2450,7 @@ function showExpenseDetail(id) {
   const r=DB.expenses.find(x=>x.id===id);if(!r)return;
   const v=DB.vehicles.find(x=>x.id===r.vehicleId);
   const u=DB.users.find(x=>x.id===r.userId);
-  const canDelete=currentUser.role==='admin'||r.userId===currentUser.id;
+  const canDelete=currentUser.role!=='visualizador'&&(currentUser.role==='admin'||r.userId===currentUser.id);
   const isAdmin=currentUser.role==='admin';
   document.getElementById('modalDetailContent').innerHTML=`
     <div class="flex-center mb-12">
@@ -2808,7 +2820,7 @@ async function saveOperator() {
 function promptDeleteOperator(userId) {
   if(userId===currentUser.id){showToast('⛔ Não pode excluir seu próprio usuário');return;}
   const u=DB.users.find(x=>x.id===userId);if(!u)return;
-  const recCount=DB.records.filter(r=>r.userId===userId).length;
+  const recCount=DB.records.filter(r=>r.userId===userId).length + DB.expenses.filter(r=>r.userId===userId).length;
   document.getElementById('deleteRecordInfo').innerHTML=`<strong>${u.name}</strong> (${u.id})<br><span style="color:var(--text3)">${recCount} registro(s) — não serão excluídos</span>`;
   document.getElementById('confirmDeleteBtn').onclick=()=>confirmDeleteOperator(userId);
   openModal('modalConfirmDelete');
@@ -2820,18 +2832,29 @@ async function confirmDeleteOperator(userId) {
   DB.users=DB.users.filter(x=>x.id!==userId);
   saveLocal(); closeModal('modalConfirmDelete'); showToast('🗑️ Operador excluído'); renderOperatorList();
 }
+function roleLabelHTML(role) {
+  if (role==='admin') return `<span class="badge-pill badge-info">🔑 Admin</span>`;
+  if (role==='visualizador') return `<span class="badge-pill" style="background:var(--warning-bg);color:var(--warning)">👁️ Visualizador</span>`;
+  return `<span class="badge-pill badge-ok">👷 Colaborador</span>`;
+}
+function roleIcon(role) {
+  if (role==='admin') return '🔑';
+  if (role==='visualizador') return '👁️';
+  return '👤';
+}
 function renderOperatorList() {
   const el=document.getElementById('operatorListEl');if(!el)return;
   if(!DB.users.length){el.innerHTML=`<div class="card"><div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Nenhum operador</div></div></div>`;return;}
   el.innerHTML=`<div class="card">`+DB.users.map(u=>{
-    const recCount=DB.records.filter(r=>r.userId===u.id).length;
-    const roleLabel=u.role==='admin'?`<span class="badge-pill badge-info">🔑 Admin</span>`:`<span class="badge-pill badge-ok">👷 Colaborador</span>`;
+    // Conta TODOS os lançamentos do operador: medições + despesas (antes contava só medições)
+    const recCount=DB.records.filter(r=>r.userId===u.id).length + DB.expenses.filter(r=>r.userId===u.id).length;
+    const roleLabel=roleLabelHTML(u.role);
     const vIds=u.vehicle_ids;
     const vLabel=(!vIds||!vIds.length)
       ?`<span class="text-xs text-muted">🚗 Todos os veículos</span>`
       :`<span class="text-xs text-muted">🚗 ${vIds.length} veículo(s)</span>`;
     return `<div class="list-item">
-      <div class="list-icon" style="font-size:24px;background:var(--primary-light)">${u.role==='admin'?'🔑':'👤'}</div>
+      <div class="list-icon" style="font-size:24px;background:var(--primary-light)">${roleIcon(u.role)}</div>
       <div class="list-content">
         <div class="list-title">${u.name}</div>
         <div class="list-sub">${u.id} · ${recCount} registro(s)</div>

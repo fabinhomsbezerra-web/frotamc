@@ -718,7 +718,8 @@ input[type="hidden"] { display: none; }
     <div class="header-logo">📊 Relatórios</div>
     <div style="flex:1"></div>
     <button class="btn-icon stat-receita" onclick="generateVehicleReportPDF()" title="Relatório geral em PDF">📄</button>
-    <button class="btn-icon" onclick="exportData()" title="Exportar">📤</button>
+    <button class="btn-icon stat-receita" onclick="generateVehicleReportExcel()" title="Relatório geral em Excel">📊</button>
+    <button class="btn-icon" onclick="exportData()" title="Exportar CSV">📤</button>
     <button class="btn-icon" onclick="manualSync()" title="Sincronizar">🔄</button>
     <button class="btn-icon" onclick="confirmLogout()" title="Sair">🚪</button>
   </div>
@@ -1012,6 +1013,7 @@ input[type="hidden"] { display: none; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SUPA_URL = 'https://odxpsonlpznrinbuktri.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9keHBzb25scHpucmluYnVrdHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDQ0NDIsImV4cCI6MjA5NzEyMDQ0Mn0.smy-2kUMSetaaC7SITqfEZG6ZwT7g0-FkDn1i_FZKUg';
@@ -2975,15 +2977,9 @@ function buildExpenseDesc(r) {
   if (r.obs) desc += ' — ' + r.obs;
   return desc;
 }
-async function generateVehicleReportPDF() {
-  if (!currentUser || currentUser.role !== 'admin') { showToast('⚠️ Disponível apenas para administradores'); return; }
-  if (!window.jspdf || !window.jspdf.jsPDF) { showToast('❌ Biblioteca de PDF não carregou — verifique sua conexão'); return; }
-  const fromStr = document.getElementById('filterFrom').value;
-  const toStr = document.getElementById('filterTo').value;
-  showLoading('Gerando relatório...');
-  await new Promise(r => setTimeout(r, 30)); // deixa o loading renderizar antes do trabalho pesado
-
-  // Coleta lançamentos de receita (medições com valor unitário definido) e despesas, no período, de TODOS os veículos
+// Coleta lançamentos de receita (medições) e despesas no período, de TODOS os veículos.
+// Inclui TODOS os registros do período (mesmo medições sem receita gerada), não só os financeiros.
+function collectVehicleReportData(fromStr, toStr) {
   const entradasPorVeiculo = {};
   const saidasPorVeiculo = {};
   const lancamentosPorVeiculo = {}; // {vehicleId: [{dt, desc, entrada, saida}]}
@@ -2993,9 +2989,8 @@ async function generateVehicleReportPDF() {
     const key = localDateKey(r.dt);
     if (fromStr && key < fromStr) return;
     if (toStr && key > toStr) return;
-    const receita = calcReceita(r);
-    if (receita <= 0) return; // só entra no relatório financeiro quem gerou receita
-    entradasPorVeiculo[r.vehicleId] = (entradasPorVeiculo[r.vehicleId] || 0) + receita;
+    const receita = calcReceita(r); // 0 se não gerou receita (sem valor unitário ou sem leitura anterior)
+    if (receita > 0) entradasPorVeiculo[r.vehicleId] = (entradasPorVeiculo[r.vehicleId] || 0) + receita;
     if (!lancamentosPorVeiculo[r.vehicleId]) lancamentosPorVeiculo[r.vehicleId] = [];
     lancamentosPorVeiculo[r.vehicleId].push({ dt: r.dt, desc: buildRecordDesc(r), entrada: receita, saida: 0 });
   });
@@ -3009,11 +3004,10 @@ async function generateVehicleReportPDF() {
     lancamentosPorVeiculo[r.vehicleId].push({ dt: r.dt, desc: buildExpenseDesc(r), entrada: 0, saida: valor });
   });
 
+  // Um veículo entra no relatório se teve QUALQUER lançamento no período (receita, despesa ou medição simples)
   const veiculosComMovimento = DB.vehicles
-    .filter(v => (entradasPorVeiculo[v.id] || saidasPorVeiculo[v.id]))
+    .filter(v => (lancamentosPorVeiculo[v.id] && lancamentosPorVeiculo[v.id].length))
     .sort((a, b) => (b.nome > a.nome ? -1 : 1));
-
-  if (!veiculosComMovimento.length) { hideLoading(); showToast('⚠️ Nenhum lançamento no período selecionado'); return; }
 
   const totalEntradas = Object.values(entradasPorVeiculo).reduce((s, x) => s + x, 0);
   const totalSaidas = Object.values(saidasPorVeiculo).reduce((s, x) => s + x, 0);
@@ -3023,6 +3017,21 @@ async function generateVehicleReportPDF() {
   const periodoLabel = (fromStr || toStr)
     ? `PERÍODO: ${fromStr ? fmtDate(fromStr + 'T12:00:00') : '—'} A ${toStr ? fmtDate(toStr + 'T12:00:00') : '—'}`
     : 'PERÍODO: TODOS OS REGISTROS';
+
+  return { entradasPorVeiculo, saidasPorVeiculo, lancamentosPorVeiculo, veiculosComMovimento, totalEntradas, totalSaidas, resultadoLiquido, margemLiquida, periodoLabel };
+}
+
+async function generateVehicleReportPDF() {
+  if (!currentUser || currentUser.role !== 'admin') { showToast('⚠️ Disponível apenas para administradores'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) { showToast('❌ Biblioteca de PDF não carregou — verifique sua conexão'); return; }
+  const fromStr = document.getElementById('filterFrom').value;
+  const toStr = document.getElementById('filterTo').value;
+  showLoading('Gerando relatório...');
+  await new Promise(r => setTimeout(r, 30)); // deixa o loading renderizar antes do trabalho pesado
+
+  const { entradasPorVeiculo, saidasPorVeiculo, lancamentosPorVeiculo, veiculosComMovimento, totalEntradas, totalSaidas, resultadoLiquido, margemLiquida, periodoLabel } = collectVehicleReportData(fromStr, toStr);
+
+  if (!veiculosComMovimento.length) { hideLoading(); showToast('⚠️ Nenhum lançamento no período selecionado'); return; }
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -3058,7 +3067,7 @@ async function generateVehicleReportPDF() {
   const bodyRows = veiculosComMovimento.map(v => {
     const ent = entradasPorVeiculo[v.id] || 0;
     const sai = saidasPorVeiculo[v.id] || 0;
-    return [v.nome, fmtMoneyBR(ent), fmtMoneyBR(sai), fmtMoneyBR(ent - sai)];
+    return [`${v.placa} - ${v.nome}`, fmtMoneyBR(ent), fmtMoneyBR(sai), fmtMoneyBR(ent - sai)];
   });
   bodyRows.push(['TOTAL GERAL', fmtMoneyBR(totalEntradas), fmtMoneyBR(totalSaidas), fmtMoneyBR(resultadoLiquido)]);
 
@@ -3082,7 +3091,7 @@ async function generateVehicleReportPDF() {
     const ent = entradasPorVeiculo[v.id] || 0;
     const sai = saidasPorVeiculo[v.id] || 0;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(20, 20, 30);
-    doc.text(`VEÍCULO: ${v.nome.toUpperCase()}`, margin, 46);
+    doc.text(`VEÍCULO: ${v.placa} - ${v.nome.toUpperCase()}`, margin, 46);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(90, 90, 100);
     doc.text(periodoLabel, margin, 62);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
@@ -3112,6 +3121,78 @@ async function generateVehicleReportPDF() {
   doc.save(`frotamc_relatorio_geral_${periodoArquivo}.pdf`);
   hideLoading();
   showToast('✅ Relatório PDF gerado!');
+}
+
+// ── RELATÓRIO GERAL EM EXCEL (mesma base de dados do PDF: resumo + uma aba por veículo) ──
+function sheetNameSafe(str) {
+  // Nomes de aba no Excel: máx. 31 caracteres e sem : \ / ? * [ ]
+  return String(str).replace(/[:\\/?*\[\]]/g, ' ').trim().slice(0, 31) || 'Veículo';
+}
+async function generateVehicleReportExcel() {
+  if (!currentUser || currentUser.role !== 'admin') { showToast('⚠️ Disponível apenas para administradores'); return; }
+  if (!window.XLSX) { showToast('❌ Biblioteca de Excel não carregou — verifique sua conexão'); return; }
+  const fromStr = document.getElementById('filterFrom').value;
+  const toStr = document.getElementById('filterTo').value;
+  showLoading('Gerando planilha...');
+  await new Promise(r => setTimeout(r, 30));
+
+  const { entradasPorVeiculo, saidasPorVeiculo, lancamentosPorVeiculo, veiculosComMovimento, totalEntradas, totalSaidas, resultadoLiquido, margemLiquida, periodoLabel } = collectVehicleReportData(fromStr, toStr);
+
+  if (!veiculosComMovimento.length) { hideLoading(); showToast('⚠️ Nenhum lançamento no período selecionado'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // ── Aba RESUMO GERAL ──
+  const resumoAOA = [
+    ['RESUMO GERAL - CONTROLE DOS VEÍCULOS'],
+    [periodoLabel],
+    [],
+    ['VEÍCULO', 'ENTRADAS', 'SAÍDAS', 'RESULTADO']
+  ];
+  veiculosComMovimento.forEach(v => {
+    const ent = entradasPorVeiculo[v.id] || 0;
+    const sai = saidasPorVeiculo[v.id] || 0;
+    resumoAOA.push([`${v.placa} - ${v.nome}`, ent, sai, ent - sai]);
+  });
+  resumoAOA.push(['TOTAL GERAL', totalEntradas, totalSaidas, resultadoLiquido]);
+  resumoAOA.push([]);
+  resumoAOA.push(['MARGEM LÍQUIDA', `${margemLiquida.toFixed(1)}%`]);
+  const wsResumo = XLSX.utils.aoa_to_sheet(resumoAOA);
+  wsResumo['!cols'] = [{ wch: 32 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo Geral');
+
+  // ── Uma aba por veículo: extrato detalhado ──
+  const nomesUsados = {};
+  veiculosComMovimento.forEach(v => {
+    const lancamentos = (lancamentosPorVeiculo[v.id] || []).slice().sort((a, b) => new Date(a.dt) - new Date(b.dt));
+    let acumulado = 0;
+    const aoa = [
+      [`VEÍCULO: ${v.placa} - ${v.nome}`],
+      [periodoLabel],
+      [],
+      ['DIA', 'DESCRIÇÃO', 'ENTRADAS', 'SAÍDAS', 'ACUMULADO']
+    ];
+    lancamentos.forEach(l => {
+      acumulado += l.entrada - l.saida;
+      aoa.push([fmtDate(l.dt), l.desc, l.entrada || '', l.saida || '', acumulado]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{ wch: 12 }, { wch: 50 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+    let sheetName = sheetNameSafe(`${v.placa} ${v.nome}`);
+    // Garante nomes de aba únicos (caso truncados coincidam)
+    if (nomesUsados[sheetName]) {
+      nomesUsados[sheetName]++;
+      sheetName = sheetNameSafe(sheetName).slice(0, 28) + ' ' + nomesUsados[sheetName];
+    } else {
+      nomesUsados[sheetName] = 1;
+    }
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  const periodoArquivo = `${fromStr || 'inicio'}_a_${toStr || 'hoje'}`;
+  XLSX.writeFile(wb, `frotamc_relatorio_geral_${periodoArquivo}.xlsx`);
+  hideLoading();
+  showToast('✅ Relatório Excel gerado!');
 }
 
 // ── EXPORT CSV ──

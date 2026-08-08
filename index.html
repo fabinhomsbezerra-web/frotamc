@@ -2253,7 +2253,7 @@ function applyFilters() {
   const statLucroValorEl = document.getElementById('statLucroValor');
   const statLucroPctEl = document.getElementById('statLucroPct');
   if (statReceitasEl) {
-    if (currentUser && currentUser.role === 'admin') {
+    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'visualizador')) {
       document.querySelectorAll('.stat-receita').forEach(el => el.style.display = '');
       const totalReceitas = all.filter(r=>r._kind==='medicao').reduce((s,r)=>s+calcReceita(r),0);
       statReceitasEl.textContent = `R$ ${totalReceitas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
@@ -2317,7 +2317,8 @@ function showRecordDetail(id) {
   if(r.hor!=null)vals.push(`<tr><td class="text-muted" style="padding:6px 0;">⏱️ Horímetro</td><td style="font-weight:700;text-align:right">${Number(r.hor).toLocaleString('pt-BR')} h</td></tr>`);
   const canDelete=currentUser.role!=='visualizador'&&(currentUser.role==='admin'||r.userId===currentUser.id);
   const isAdmin=currentUser.role==='admin';
-  if (isAdmin && r.valorUnitario!=null) {
+  const canSeeFinance=isAdmin||currentUser.role==='visualizador';
+  if (canSeeFinance && r.valorUnitario!=null) {
     const receita = calcReceita(r);
     vals.push(`<tr><td class="text-muted" style="padding:6px 0;">📈 Receita</td><td style="font-weight:700;text-align:right;color:#16a34a">R$ ${receita.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td></tr>`);
     const b = getReceitaBreakdown(r);
@@ -3045,7 +3046,7 @@ function collectVehicleReportData(fromStr, toStr) {
 }
 
 async function generateVehicleReportPDF() {
-  if (!currentUser || currentUser.role !== 'admin') { showToast('⚠️ Disponível apenas para administradores'); return; }
+  if (!currentUser || !(currentUser.role === 'admin' || currentUser.role === 'visualizador')) { showToast('⚠️ Disponível apenas para administradores'); return; }
   if (!window.jspdf || !window.jspdf.jsPDF) { showToast('❌ Biblioteca de PDF não carregou — verifique sua conexão'); return; }
   const fromStr = document.getElementById('filterFrom').value;
   const toStr = document.getElementById('filterTo').value;
@@ -3152,7 +3153,7 @@ function sheetNameSafe(str) {
   return String(str).replace(/[:\\/?*\[\]]/g, ' ').trim().slice(0, 31) || 'Veículo';
 }
 async function generateVehicleReportExcel() {
-  if (!currentUser || currentUser.role !== 'admin') { showToast('⚠️ Disponível apenas para administradores'); return; }
+  if (!currentUser || !(currentUser.role === 'admin' || currentUser.role === 'visualizador')) { showToast('⚠️ Disponível apenas para administradores'); return; }
   if (!window.XLSX) { showToast('❌ Biblioteca de Excel não carregou — verifique sua conexão'); return; }
   const fromStr = document.getElementById('filterFrom').value;
   const toStr = document.getElementById('filterTo').value;

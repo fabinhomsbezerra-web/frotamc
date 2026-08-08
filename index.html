@@ -2108,9 +2108,20 @@ async function saveVehicle() {
   if(editId) {
     // Edição — placa também pode ser alterada, checando duplicidade com outros veículos
     if(DB.vehicles.find(v=>v.placa===placa && v.id!==editId)){hideLoading();showToast('⚠️ Placa já cadastrada em outro veículo');return;}
-    try { await supa.from('veiculos').update({nome,tipo,medicao,placa}).eq('id',editId); } catch(e){}
     const v=DB.vehicles.find(x=>x.id===editId);
-    if(v){v.nome=nome;v.tipo=tipo;v.medicao=medicao;v.placa=placa;}
+    const upd={nome,tipo,medicao,placa};
+    // Se o tipo de medição mudou e não usa mais km e/ou horímetro, limpa a leitura antiga
+    // que ficou sem sentido (ex.: trator que era "Ambos" virou só "Horímetro" — o km some do card)
+    const usaKm = medicao==='km'||medicao==='ambos';
+    const usaHor = medicao==='hor'||medicao==='ambos';
+    if(!usaKm) upd.last_km=null;
+    if(!usaHor) upd.last_hor=null;
+    try { await supa.from('veiculos').update(upd).eq('id',editId); } catch(e){}
+    if(v){
+      v.nome=nome;v.tipo=tipo;v.medicao=medicao;v.placa=placa;
+      if(!usaKm) v.lastKm=null;
+      if(!usaHor) v.lastHor=null;
+    }
     hideLoading(); saveLocal(); closeModal('modalVehicle'); renderVehicleList(); showToast('✅ Veículo atualizado!');
   } else {
     // Novo

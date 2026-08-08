@@ -1280,7 +1280,7 @@ function mapRecord(r) {
   return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, km:r.km, hor:r.hor, obs:r.obs, photos:readPhotos(r), gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo, valorUnitario:(r.valor_unitario!=null?Number(r.valor_unitario):null) };
 }
 function mapExpense(r) {
-  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, valor:r.valor, categoria:r.categoria||null, obs:r.obs, photos:readPhotos(r), gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
+  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, valor:r.valor, categoria:r.categoria||null, km:r.km!=null?Number(r.km):null, hor:r.hor!=null?Number(r.hor):null, obs:r.obs, photos:readPhotos(r), gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
 }
 async function syncPending() {
   if (pendingSync.length) {
@@ -1294,7 +1294,7 @@ async function syncPending() {
   if (pendingSyncExpenses.length) {
     for (const rec of [...pendingSyncExpenses]) {
       try {
-        const { error } = await supa.from('despesas').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, valor:rec.valor, categoria:rec.categoria||null, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto });
+        const { error } = await supa.from('despesas').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, valor:rec.valor, categoria:rec.categoria||null, km:rec.km!=null?rec.km:null, hor:rec.hor!=null?rec.hor:null, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto });
         if (!error) pendingSyncExpenses = pendingSyncExpenses.filter(p => p.id !== rec.id);
       } catch(e) {}
     }
@@ -1671,6 +1671,8 @@ function renderStep() {
     </div>`;
 
   } else if (regState.step===2 && isDespesa) {
+    const v = regState.vehicle;
+    const isCombustivel = /combust/i.test(regState.categoria || '');
     html += `<div class="section-header">Informe o valor da despesa</div>
     <div class="form-group">
       <div class="form-label-row"><label class="form-label">💰 Valor (R$)</label>${kbdToggleBtn('inputValor')}</div>
@@ -1683,8 +1685,28 @@ function renderStep() {
       <div class="tag-row" id="catTags">
         ${getCategorias().map(c=>`<span class="tag ${regState.categoria===c?'selected':''}" onclick="selectExpenseCategory(this,'${c}')">${c}</span>`).join('')}
       </div>
-    </div>
-    <div class="form-hint" style="margin-bottom:8px">O valor e a categoria são opcionais — preencha o que estiver disponível.</div>
+    </div>`;
+    if (isCombustivel && v) {
+      html += `<div class="section-header">⛽ Leitura no abastecimento (opcional)</div>`;
+      if (v.medicao==='km'||v.medicao==='ambos') {
+        html += `<div class="form-group">
+          <div class="form-label-row"><label class="form-label">📍 Quilometragem atual</label>${kbdToggleBtn('inputKm')}</div>
+          <input type="text" class="form-input" id="inputKm" value="${regState.km!=null?String(regState.km).replace('.',','):''}" placeholder="Ex: 45820 ou 45820,5" inputmode="decimal">
+          <div class="form-hint">${v.lastKm!=null?`Último: ${Number(v.lastKm).toLocaleString('pt-BR')} km`:'Primeira leitura'}</div>
+          <div class="form-error" id="kmError">⚠️ Valor menor que o último registrado!</div>
+        </div>`;
+      }
+      if (v.medicao==='hor'||v.medicao==='ambos') {
+        html += `<div class="form-group">
+          <div class="form-label-row"><label class="form-label">⏱️ Horímetro atual (horas)</label>${kbdToggleBtn('inputHor')}</div>
+          <input type="text" class="form-input" id="inputHor" value="${regState.hor!=null?String(regState.hor).replace('.',','):''}" placeholder="Ex: 3420 ou 3420,5" inputmode="decimal">
+          <div class="form-hint">${v.lastHor!=null?`Último: ${Number(v.lastHor).toLocaleString('pt-BR')} h`:'Primeira leitura'}</div>
+          <div class="form-error" id="horError">⚠️ Valor menor que o último registrado!</div>
+        </div>`;
+      }
+      html += `<div class="form-hint" style="margin-bottom:8px">Se informada, essa leitura vira a última leitura do veículo na aba Veículos.</div>`;
+    }
+    html += `<div class="form-hint" style="margin-bottom:8px">O valor e a categoria são opcionais — preencha o que estiver disponível.</div>
     <div style="display:flex;gap:10px;margin-top:8px">
       <button class="btn btn-secondary" onclick="prevStep()">← Voltar</button>
       <button class="btn btn-primary" onclick="saveValor()">Continuar →</button>
@@ -1759,6 +1781,8 @@ function renderStep() {
       <table style="width:100%">
         <tr><td class="text-muted" style="padding:8px 0;font-size:15px;">💰 Valor</td><td style="font-size:18px;font-weight:700;text-align:right">${valorFmt}</td></tr>
         ${regState.categoria?`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">🏷️ Categoria</td><td style="font-size:15px;font-weight:600;text-align:right">${regState.categoria}</td></tr>`:''}
+        ${regState.km!=null?`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">📍 Quilometragem</td><td style="font-size:15px;font-weight:600;text-align:right">${Number(regState.km).toLocaleString('pt-BR')} km</td></tr>`:''}
+        ${regState.hor!=null?`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">⏱️ Horímetro</td><td style="font-size:15px;font-weight:600;text-align:right">${Number(regState.hor).toLocaleString('pt-BR')} h</td></tr>`:''}
       </table>
       ${regState.obs?`<div class="divider"></div><div class="text-sm text-muted">💬 ${regState.obs}</div>`:''}
       <div class="divider"></div>
@@ -1908,6 +1932,14 @@ function selectExpenseCategory(el,cat) {
   el.parentElement.querySelectorAll('.tag').forEach(t=>t.classList.remove('selected'));
   if (!already) { el.classList.add('selected'); regState.categoria = cat; }
   else { regState.categoria = ''; }
+  // Preserva o valor já digitado antes de re-renderizar o passo — trocar a categoria
+  // pode revelar/esconder os campos de leitura (km/horímetro) quando for Combustível
+  const valorEl = document.getElementById('inputValor');
+  if (valorEl && valorEl.value.trim()!=='') {
+    const val = parseDecimal(valorEl.value);
+    if (!isNaN(val)) regState.valor = val;
+  }
+  renderStep();
 }
 function saveValor() {
   const valorEl = document.getElementById('inputValor');
@@ -1918,6 +1950,30 @@ function saveValor() {
     regState.valor = val;
   } else {
     regState.valor = null;
+  }
+  // Leitura de km/horímetro no abastecimento (só existe na tela quando a categoria é Combustível)
+  const v = regState.vehicle;
+  const kmEl = document.getElementById('inputKm');
+  const horEl = document.getElementById('inputHor');
+  if (kmEl) {
+    if (kmEl.value.trim()!=='') {
+      const val = parseDecimal(kmEl.value);
+      if (isNaN(val)) { showToast('❌ Quilometragem inválida!'); return; }
+      if (v && v.lastKm && val<v.lastKm) { showToast('❌ Km menor que o último!'); return; }
+      regState.km = val;
+    } else {
+      regState.km = null;
+    }
+  }
+  if (horEl) {
+    if (horEl.value.trim()!=='') {
+      const val = parseDecimal(horEl.value);
+      if (isNaN(val)) { showToast('❌ Horímetro inválido!'); return; }
+      if (v && v.lastHor && val<v.lastHor) { showToast('❌ Horímetro menor que o último!'); return; }
+      regState.hor = val;
+    } else {
+      regState.hor = null;
+    }
   }
   nextStep();
 }
@@ -1995,8 +2051,11 @@ async function submitRecord() {
 async function submitExpense() {
   const id='d'+Date.now();
   const recDt = regState.regDate ? new Date(regState.regDate).toISOString() : new Date().toISOString();
-  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,valor:regState.valor,categoria:regState.categoria||null,obs:regState.obs,photos:(regState.photos||[]).slice(),gps:regState.gps,hasPhoto:!!(regState.photos&&regState.photos.length)};
+  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,valor:regState.valor,categoria:regState.categoria||null,km:regState.km,hor:regState.hor,obs:regState.obs,photos:(regState.photos||[]).slice(),gps:regState.gps,hasPhoto:!!(regState.photos&&regState.photos.length)};
   DB.expenses.unshift(rec);
+  // Se foi informada leitura de km/horímetro no abastecimento, ela vira a última leitura do veículo (igual a um registro de medição)
+  const v=DB.vehicles.find(x=>x.id===regState.vehicle.id);
+  if(v){ if(rec.km!=null) v.lastKm=rec.km; if(rec.hor!=null) v.lastHor=rec.hor; }
   saveLocal();
   showLoading('Salvando na nuvem...');
   try {
@@ -2007,13 +2066,27 @@ async function submitExpense() {
       dt: rec.dt,
       valor: rec.valor,
       categoria: rec.categoria,
+      km: rec.km,
+      hor: rec.hor,
       obs: rec.obs || null,
       gps_lat: rec.gps?.lat || null,
       gps_lng: rec.gps?.lng || null,
       has_photo: rec.hasPhoto
     };
-    const { error } = await supa.from('despesas').insert(payload);
-    if (error) throw new Error(error.message);
+    let { error } = await supa.from('despesas').insert(payload);
+    if (error) {
+      // Fallback: as colunas km/hor podem ainda não existir na tabela 'despesas' — tenta sem elas
+      const { km, hor, ...payloadSemLeitura } = payload;
+      const retry = await supa.from('despesas').insert(payloadSemLeitura);
+      if (retry.error) throw new Error(retry.error.message);
+    }
+    // Atualiza a última leitura do veículo, igual acontece ao salvar um registro de medição
+    if (v) {
+      const updV = {};
+      if (rec.km!=null) updV.last_km = rec.km;
+      if (rec.hor!=null) updV.last_hor = rec.hor;
+      if (Object.keys(updV).length) await supa.from('veiculos').update(updV).eq('id', rec.vehicleId);
+    }
     hideLoading();
     // Sobe as fotos pro Supabase Storage (não pesa o banco) e salva as URLs públicas na despesa
     if (rec.photos.length) {
@@ -2138,9 +2211,13 @@ function renderVehicleList() {
   if(!DB.vehicles.length){el.innerHTML=`<div class="card"><div class="empty"><div class="empty-icon">🚗</div><div class="empty-title">Nenhum veículo cadastrado</div></div></div>`;return;}
   const isAdmin=currentUser&&currentUser.role==='admin';
   el.innerHTML=`<div class="card">`+DB.vehicles.map(v=>{
-    const lastRec=DB.records.filter(r=>r.vehicleId===v.id).sort((a,b)=>new Date(b.dt)-new Date(a.dt))[0];
+    // Última movimentação e contagem consideram TODOS os lançamentos (medições + despesas),
+    // não só medições — antes uma despesa recente não aparecia como "última" nem entrava na contagem.
+    const lastMed=DB.records.filter(r=>r.vehicleId===v.id).sort((a,b)=>new Date(b.dt)-new Date(a.dt))[0];
+    const lastDesp=DB.expenses.filter(r=>r.vehicleId===v.id).sort((a,b)=>new Date(b.dt)-new Date(a.dt))[0];
+    const lastRec=[lastMed,lastDesp].filter(Boolean).sort((a,b)=>new Date(b.dt)-new Date(a.dt))[0];
     const lastDt=lastRec?`Último: ${fmtDate(lastRec.dt)}`:'Sem registros';
-    const recCount=DB.records.filter(r=>r.vehicleId===v.id).length;
+    const recCount=DB.records.filter(r=>r.vehicleId===v.id).length + DB.expenses.filter(r=>r.vehicleId===v.id).length;
     const vals=[];
     if(v.lastKm!=null)vals.push(`📍 ${Number(v.lastKm).toLocaleString('pt-BR')} km`);
     if(v.lastHor!=null)vals.push(`⏱️ ${Number(v.lastHor).toLocaleString('pt-BR')} h`);
@@ -2207,7 +2284,7 @@ async function saveAdjust() {
 }
 function promptDeleteVehicle(vehicleId) {
   const v=DB.vehicles.find(x=>x.id===vehicleId);if(!v)return;
-  const recCount=DB.records.filter(r=>r.vehicleId===vehicleId).length;
+  const recCount=DB.records.filter(r=>r.vehicleId===vehicleId).length + DB.expenses.filter(r=>r.vehicleId===vehicleId).length;
   document.getElementById('deleteRecordInfo').innerHTML=`<strong>${getEmoji(v.tipo)} ${v.nome}</strong> <span class="font-mono">(${v.placa})</span><br><span style="color:var(--text3)">${recCount} registro(s) — não serão excluídos</span>`;
   document.getElementById('confirmDeleteBtn').onclick=()=>confirmDeleteVehicle(vehicleId);
   openModal('modalConfirmDelete');
@@ -2473,6 +2550,8 @@ function showExpenseDetail(id) {
     <table style="width:100%;margin-bottom:12px">
       <tr><td class="text-muted" style="padding:6px 0;">💰 Valor</td><td style="font-weight:700;text-align:right">${r.valor!=null?`R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`:'Não informado'}</td></tr>
       ${r.categoria?`<tr><td class="text-muted" style="padding:6px 0;">🏷️ Categoria</td><td style="font-weight:700;text-align:right">${r.categoria}</td></tr>`:''}
+      ${r.km!=null?`<tr><td class="text-muted" style="padding:6px 0;">📍 Quilometragem</td><td style="font-weight:700;text-align:right">${Number(r.km).toLocaleString('pt-BR')} km</td></tr>`:''}
+      ${r.hor!=null?`<tr><td class="text-muted" style="padding:6px 0;">⏱️ Horímetro</td><td style="font-weight:700;text-align:right">${Number(r.hor).toLocaleString('pt-BR')} h</td></tr>`:''}
     </table>
     <div class="divider"></div>
     <div class="text-sm text-muted" style="margin-bottom:6px">🕐 ${fmtDateTime(r.dt)}</div>

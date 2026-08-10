@@ -1539,7 +1539,7 @@ function renderHome() {
   const mineRecs = DB.records.filter(r => seesAll || r.userId === currentUser.id).map(r=>({...r, _kind:'medicao'}));
   const mineExp = DB.expenses.filter(r => seesAll || r.userId === currentUser.id).map(r=>({...r, _kind:'despesa'}));
   const mine = [...mineRecs, ...mineExp]
-    .sort(compareByEntry)
+    .sort(compareByDateAndEntry)
     .slice(0, 15);
   if (!mine.length) {
     el.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum registro ainda</div><p class="empty-text">${currentUser.role==='visualizador'?'Nenhum lançamento para acompanhar ainda':'Toque em "Novo Registro" para começar'}</p></div>`;
@@ -2333,7 +2333,7 @@ function applyFilters() {
   if(vId)all=all.filter(r=>r.vehicleId===vId);
   if(from)all=all.filter(r=>localDateKey(r.dt)>=from);
   if(to)all=all.filter(r=>localDateKey(r.dt)<=to);
-  all.sort(compareByEntry);
+  all.sort(compareByDateAndEntry);
   const totalDespesas = all.filter(r=>r._kind==='despesa').reduce((s,r)=>s+(r.valor||0),0);
   const statKmEl = document.getElementById('statKm');
   if (statKmEl) { statKmEl.textContent = `R$ ${totalDespesas.toLocaleString('pt-BR',{minimumFractionDigits:2})}`; }
@@ -3323,7 +3323,7 @@ function exportData() {
     const u=DB.users.find(x=>x.id===r.userId);
     all.push({dt:r.dt, row:['Despesa',fmtDateTime(r.dt),v?v.nome:'',v?v.placa:'','','',r.valor!=null?String(r.valor).replace('.',','):'',r.categoria||'',u?u.name:r.userId,r.obs||'',r.gps?`${r.gps.lat.toFixed(5)},${r.gps.lng.toFixed(5)}`:'','','']});
   });
-  all.sort(compareByDateOnly);
+  all.sort(compareByDateAndEntry);
   const rows=[['Tipo','Data','Veículo','Placa','Km','Horímetro','Valor','Categoria','Colaborador','Obs','GPS','Valor unitário serviço','Receita'], ...all.map(x=>x.row)];
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
@@ -3356,11 +3356,6 @@ function localDateKey(iso){
   const local = new Date(d.getTime() - off*60000);
   return local.toISOString().slice(0,10);
 }
-// Ordena registros/despesas apenas pela DATA (dia), ignorando o horário — do mais recente pro mais antigo.
-// Em caso de empate no mesmo dia, mantém a ordem de lançamento (o sort é estável).
-function compareByDateOnly(a, b) {
-  return localDateKey(b.dt).localeCompare(localDateKey(a.dt));
-}
 // Extrai o instante real em que o registro foi CRIADO no sistema (não confundir com o campo "dt",
 // que é a data/hora do evento e pode ter sido editada/backdated pelo usuário).
 // Os ids são gerados como 'r'+Date.now(), 'd'+Date.now() etc — ou seja, já carregam o timestamp
@@ -3370,9 +3365,12 @@ function entryTimestamp(r) {
   if (m) return Number(m[1]);
   return new Date(r.dt).getTime() || 0; // fallback pra registros com id fora do padrão
 }
-// Ordena pela SEQUÊNCIA DE LANÇAMENTO (o mais recente lançado sempre primeiro),
-// independente da hora escolhida no campo "dt".
-function compareByEntry(a, b) {
+// Ordena SOMENTE pela DATA (dia) do lançamento — do mais recente pro mais antigo — e,
+// em caso de empate no mesmo dia, pela SEQUÊNCIA DE LANÇAMENTO (o mais recente lançado
+// no sistema aparece primeiro). Ignora a hora escolhida no campo "dt".
+function compareByDateAndEntry(a, b) {
+  const porData = localDateKey(b.dt).localeCompare(localDateKey(a.dt));
+  if (porData !== 0) return porData;
   return entryTimestamp(b) - entryTimestamp(a);
 }
 

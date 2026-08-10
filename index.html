@@ -1188,7 +1188,7 @@ async function saveAppConfig() {
   cfgLogoPending = undefined;
 }
 let currentUser = null;
-let regState = { step:0, kind:'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, categoria:'', sig:null, obs:'', gps:null, _ocrRaw:null, _ocrSuggested:null };
+let regState = { step:0, kind:'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, precoLitro:null, categoria:'', sig:null, obs:'', gps:null, _ocrRaw:null, _ocrSuggested:null };
 let pendingSync = [];
 let pendingSyncExpenses = [];
 
@@ -1280,7 +1280,7 @@ function mapRecord(r) {
   return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, km:r.km, hor:r.hor, obs:r.obs, photos:readPhotos(r), gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo, valorUnitario:(r.valor_unitario!=null?Number(r.valor_unitario):null) };
 }
 function mapExpense(r) {
-  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, valor:r.valor, categoria:r.categoria||null, km:r.km!=null?Number(r.km):null, hor:r.hor!=null?Number(r.hor):null, obs:r.obs, photos:readPhotos(r), gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo };
+  return { id:r.id, vehicleId:r.vehicle_id, userId:r.user_id, dt:r.dt, valor:r.valor, categoria:r.categoria||null, km:r.km!=null?Number(r.km):null, hor:r.hor!=null?Number(r.hor):null, obs:r.obs, photos:readPhotos(r), gps:(r.gps_lat?{lat:r.gps_lat,lng:r.gps_lng}:null), hasPhoto:r.has_photo, precoLitro:(r.preco_litro!=null?Number(r.preco_litro):null) };
 }
 async function syncPending() {
   if (pendingSync.length) {
@@ -1294,7 +1294,12 @@ async function syncPending() {
   if (pendingSyncExpenses.length) {
     for (const rec of [...pendingSyncExpenses]) {
       try {
-        const { error } = await supa.from('despesas').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, valor:rec.valor, categoria:rec.categoria||null, km:rec.km!=null?rec.km:null, hor:rec.hor!=null?rec.hor:null, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto });
+        let { error } = await supa.from('despesas').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, valor:rec.valor, categoria:rec.categoria||null, km:rec.km!=null?rec.km:null, hor:rec.hor!=null?rec.hor:null, preco_litro:rec.precoLitro!=null?rec.precoLitro:null, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto });
+        if (error) {
+          // Fallback: coluna preco_litro pode ainda não existir na tabela 'despesas'
+          const retry = await supa.from('despesas').upsert({ id:rec.id, vehicle_id:rec.vehicleId, user_id:rec.userId, dt:rec.dt, valor:rec.valor, categoria:rec.categoria||null, km:rec.km!=null?rec.km:null, hor:rec.hor!=null?rec.hor:null, obs:rec.obs||null, gps_lat:rec.gps?.lat||null, gps_lng:rec.gps?.lng||null, has_photo:rec.hasPhoto });
+          error = retry.error;
+        }
         if (!error) pendingSyncExpenses = pendingSyncExpenses.filter(p => p.id !== rec.id);
       } catch(e) {}
     }
@@ -1322,6 +1327,47 @@ function getReceitaBreakdown(r) {
   if (usaHor && r.hor != null && prev.hor != null) { delta = r.hor - prev.hor; prevValor = prev.hor; }
   else if (r.km != null && prev.km != null) { delta = r.km - prev.km; prevValor = prev.km; }
   return { prev, usaHor, prevValor, delta };
+}
+// ── CONSUMO DE COMBUSTÍVEL (abastecimentos) ──
+function isCombustivelExp(r) { return /combust/i.test(r.categoria || ''); }
+// Litros abastecidos = Valor do combustível ÷ Preço por litro
+function getLitrosAbastecidos(r) {
+  if (r.valor == null || !r.precoLitro || r.precoLitro <= 0) return null;
+  const l = r.valor / r.precoLitro;
+  return (isFinite(l) && l > 0) ? l : null;
+}
+// Encontra o abastecimento (despesa de categoria Combustível, com leitura de km/hor) anterior
+// do mesmo veículo — é a referência usada pra calcular o consumo, não o último lançamento qualquer.
+function getPrevAbastecimento(r) {
+  const anteriores = DB.expenses
+    .filter(x => x.id !== r.id && x.vehicleId === r.vehicleId && isCombustivelExp(x) && (x.km != null || x.hor != null) && new Date(x.dt) < new Date(r.dt))
+    .sort((a, b) => new Date(b.dt) - new Date(a.dt));
+  return anteriores[0] || null;
+}
+// Retorna { prev, usaHor, prevValor, atual, delta } com base no abastecimento anterior do veículo.
+function getConsumoBreakdown(r) {
+  if (!isCombustivelExp(r)) return null;
+  const v = DB.vehicles.find(x => x.id === r.vehicleId);
+  const prev = getPrevAbastecimento(r);
+  if (!prev) return null;
+  const usaHor = v && (v.medicao === 'hor' || (v.medicao === 'ambos' && r.hor != null && prev.hor != null));
+  if (usaHor && r.hor != null && prev.hor != null) {
+    return { prev, usaHor: true, prevValor: prev.hor, atual: r.hor, delta: r.hor - prev.hor };
+  }
+  if (r.km != null && prev.km != null) {
+    return { prev, usaHor: false, prevValor: prev.km, atual: r.km, delta: r.km - prev.km };
+  }
+  return null;
+}
+// Consumo = Km (ou h) percorridos ÷ Litros abastecidos. Retorna null se não houver abastecimento
+// anterior válido ou dados insuficientes — a tela deve mostrar "—" nesse caso.
+function calcConsumo(r) {
+  const litros = getLitrosAbastecidos(r);
+  if (litros == null) return null;
+  const b = getConsumoBreakdown(r);
+  if (!b || !(b.delta > 0)) return null;
+  const consumo = b.delta / litros;
+  return isFinite(consumo) ? { valor: consumo, usaHor: b.usaHor, litros, breakdown: b } : null;
 }
 function calcReceita(r) {
   if (r.valorUnitario == null) return 0;
@@ -1572,7 +1618,7 @@ function renderHome() {
 
 // ── WIZARD REGISTRO ──
 function startRegister(kind) {
-  regState = { step:0, kind: kind||'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, categoria:'', obs:'', gps:null, regDate:null, _ocrRaw:null, _ocrSuggested:null };
+  regState = { step:0, kind: kind||'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, precoLitro:null, categoria:'', obs:'', gps:null, regDate:null, _ocrRaw:null, _ocrSuggested:null };
   // Ativa a tela manualmente sem passar por showScreen (que não conhece 'register')
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-register').classList.add('active');
@@ -1686,6 +1732,14 @@ function renderStep() {
         ${getCategorias().map(c=>`<span class="tag ${regState.categoria===c?'selected':''}" onclick="selectExpenseCategory(this,'${c}')">${c}</span>`).join('')}
       </div>
     </div>`;
+    if (isCombustivel) {
+      html += `<div class="section-header">⛽ Preço do combustível (opcional)</div>
+      <div class="form-group">
+        <div class="form-label-row"><label class="form-label">💲 Preço por litro (R$)</label>${kbdToggleBtn('inputPrecoLitro')}</div>
+        <input type="text" class="form-input" id="inputPrecoLitro" value="${regState.precoLitro!=null?String(regState.precoLitro).replace('.',','):''}" placeholder="Ex: 5,89" inputmode="decimal">
+        <div class="form-hint">Usado junto com o valor pago pra calcular os litros abastecidos e o consumo do veículo.</div>
+      </div>`;
+    }
     if (isCombustivel && v) {
       html += `<div class="section-header">⛽ Leitura no abastecimento (opcional)</div>`;
       if (v.medicao==='km'||v.medicao==='ambos') {
@@ -1781,6 +1835,7 @@ function renderStep() {
       <table style="width:100%">
         <tr><td class="text-muted" style="padding:8px 0;font-size:15px;">💰 Valor</td><td style="font-size:18px;font-weight:700;text-align:right">${valorFmt}</td></tr>
         ${regState.categoria?`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">🏷️ Categoria</td><td style="font-size:15px;font-weight:600;text-align:right">${regState.categoria}</td></tr>`:''}
+        ${regState.precoLitro!=null?`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">💲 Preço/litro</td><td style="font-size:15px;font-weight:600;text-align:right">R$ ${Number(regState.precoLitro).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td></tr>`:''}
         ${regState.km!=null?`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">📍 Quilometragem</td><td style="font-size:15px;font-weight:600;text-align:right">${Number(regState.km).toLocaleString('pt-BR')} km</td></tr>`:''}
         ${regState.hor!=null?`<tr><td class="text-muted" style="padding:8px 0;font-size:15px;">⏱️ Horímetro</td><td style="font-size:15px;font-weight:600;text-align:right">${Number(regState.hor).toLocaleString('pt-BR')} h</td></tr>`:''}
       </table>
@@ -1939,6 +1994,11 @@ function selectExpenseCategory(el,cat) {
     const val = parseDecimal(valorEl.value);
     if (!isNaN(val)) regState.valor = val;
   }
+  const precoLitroEl = document.getElementById('inputPrecoLitro');
+  if (precoLitroEl && precoLitroEl.value.trim()!=='') {
+    const val = parseDecimal(precoLitroEl.value);
+    if (!isNaN(val)) regState.precoLitro = val;
+  }
   renderStep();
 }
 function saveValor() {
@@ -1950,6 +2010,17 @@ function saveValor() {
     regState.valor = val;
   } else {
     regState.valor = null;
+  }
+  // Preço por litro (só existe na tela quando a categoria é Combustível)
+  const precoLitroEl = document.getElementById('inputPrecoLitro');
+  if (precoLitroEl) {
+    if (precoLitroEl.value.trim()!=='') {
+      const val = parseDecimal(precoLitroEl.value);
+      if (isNaN(val) || val<0) { showToast('❌ Preço por litro inválido!'); return; }
+      regState.precoLitro = val;
+    } else {
+      regState.precoLitro = null;
+    }
   }
   // Leitura de km/horímetro no abastecimento (só existe na tela quando a categoria é Combustível)
   const v = regState.vehicle;
@@ -2051,7 +2122,7 @@ async function submitRecord() {
 async function submitExpense() {
   const id='d'+Date.now();
   const recDt = regState.regDate ? new Date(regState.regDate).toISOString() : new Date().toISOString();
-  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,valor:regState.valor,categoria:regState.categoria||null,km:regState.km,hor:regState.hor,obs:regState.obs,photos:(regState.photos||[]).slice(),gps:regState.gps,hasPhoto:!!(regState.photos&&regState.photos.length)};
+  const rec={id,vehicleId:regState.vehicle.id,userId:currentUser.id,dt:recDt,valor:regState.valor,categoria:regState.categoria||null,km:regState.km,hor:regState.hor,precoLitro:regState.precoLitro,obs:regState.obs,photos:(regState.photos||[]).slice(),gps:regState.gps,hasPhoto:!!(regState.photos&&regState.photos.length)};
   DB.expenses.unshift(rec);
   // Se foi informada leitura de km/horímetro no abastecimento, ela vira a última leitura do veículo (igual a um registro de medição)
   const v=DB.vehicles.find(x=>x.id===regState.vehicle.id);
@@ -2068,6 +2139,7 @@ async function submitExpense() {
       categoria: rec.categoria,
       km: rec.km,
       hor: rec.hor,
+      preco_litro: rec.precoLitro!=null?rec.precoLitro:null,
       obs: rec.obs || null,
       gps_lat: rec.gps?.lat || null,
       gps_lng: rec.gps?.lng || null,
@@ -2075,8 +2147,8 @@ async function submitExpense() {
     };
     let { error } = await supa.from('despesas').insert(payload);
     if (error) {
-      // Fallback: as colunas km/hor podem ainda não existir na tabela 'despesas' — tenta sem elas
-      const { km, hor, ...payloadSemLeitura } = payload;
+      // Fallback: as colunas km/hor/preco_litro podem ainda não existir na tabela 'despesas' — tenta sem elas
+      const { km, hor, preco_litro, ...payloadSemLeitura } = payload;
       const retry = await supa.from('despesas').insert(payloadSemLeitura);
       if (retry.error) throw new Error(retry.error.message);
     }
@@ -2378,6 +2450,7 @@ function renderReportsList(recs) {
     if(r._kind==='despesa'){
       if(r.valor!=null)vals.push(`💰 R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`);
       if(r.categoria)vals.push(`🏷️ ${r.categoria}`);
+      if(isCombustivelExp(r)){ const c=calcConsumo(r); vals.push(`🔥 ${c?c.valor.toLocaleString('pt-BR',{maximumFractionDigits:2})+' '+(c.usaHor?'h/L':'km/L'):'Consumo: —'}`); }
     } else {
       if(r.km!=null)vals.push(`📍 ${Number(r.km).toLocaleString('pt-BR')} km`);
       if(r.hor!=null)vals.push(`⏱️ ${Number(r.hor).toLocaleString('pt-BR')} h`);
@@ -2550,8 +2623,10 @@ function showExpenseDetail(id) {
     <table style="width:100%;margin-bottom:12px">
       <tr><td class="text-muted" style="padding:6px 0;">💰 Valor</td><td style="font-weight:700;text-align:right">${r.valor!=null?`R$ ${Number(r.valor).toLocaleString('pt-BR',{minimumFractionDigits:2})}`:'Não informado'}</td></tr>
       ${r.categoria?`<tr><td class="text-muted" style="padding:6px 0;">🏷️ Categoria</td><td style="font-weight:700;text-align:right">${r.categoria}</td></tr>`:''}
+      ${r.precoLitro!=null?`<tr><td class="text-muted" style="padding:6px 0;">💲 Preço/litro</td><td style="font-weight:700;text-align:right">R$ ${Number(r.precoLitro).toLocaleString('pt-BR',{minimumFractionDigits:2})}</td></tr>`:''}
       ${r.km!=null?`<tr><td class="text-muted" style="padding:6px 0;">📍 Quilometragem</td><td style="font-weight:700;text-align:right">${Number(r.km).toLocaleString('pt-BR')} km</td></tr>`:''}
       ${r.hor!=null?`<tr><td class="text-muted" style="padding:6px 0;">⏱️ Horímetro</td><td style="font-weight:700;text-align:right">${Number(r.hor).toLocaleString('pt-BR')} h</td></tr>`:''}
+      ${(()=>{ if(!isCombustivelExp(r)) return ''; const litros=getLitrosAbastecidos(r); const c=calcConsumo(r); let rows=''; if(litros!=null) rows+=`<tr><td class="text-muted" style="padding:6px 0;">⛽ Litros abastecidos</td><td style="font-weight:700;text-align:right">${litros.toLocaleString('pt-BR',{maximumFractionDigits:2})} L</td></tr>`; rows+=`<tr><td class="text-muted" style="padding:6px 0;font-weight:700">🔥 Consumo</td><td style="font-weight:700;text-align:right;color:var(--primary)">${c?c.valor.toLocaleString('pt-BR',{maximumFractionDigits:2})+' '+(c.usaHor?'h/L':'km/L'):'—'}</td></tr>`; return rows; })()}
     </table>
     <div class="divider"></div>
     <div class="text-sm text-muted" style="margin-bottom:6px">🕐 ${fmtDateTime(r.dt)}</div>
@@ -2743,9 +2818,32 @@ function editExpense(id) {
   document.getElementById('editRecordTitle').textContent='✏️ Editar despesa';
   const dtLocal = nowLocalForInput(new Date(r.dt));
   const cats=getCategorias();
+  const isComb = isCombustivelExp(r);
   editPhotosState = toPhotoArray(r.photos).slice();
   editPhotosOriginal = toPhotoArray(r.photos).slice();
   editPhotosKind = 'expense';
+  let leituraHTML = '';
+  if (isComb) {
+    leituraHTML += `<div class="section-header">⛽ Abastecimento</div>
+    <div class="form-group">
+      <div class="form-label-row"><label class="form-label">💲 Preço por litro (R$)</label>${kbdToggleBtn('editExpensePrecoLitro')}</div>
+      <input type="text" class="form-input" id="editExpensePrecoLitro" value="${r.precoLitro!=null?String(r.precoLitro).replace('.',','):''}" placeholder="Ex: 5,89" inputmode="decimal" oninput="renderEditExpenseConsumoPreview()">
+      <div class="form-hint">Junto com o valor pago, calcula os litros abastecidos e o consumo.</div>
+    </div>`;
+    if (v && (v.medicao==='km'||v.medicao==='ambos')) {
+      leituraHTML += `<div class="form-group">
+        <div class="form-label-row"><label class="form-label">📍 Quilometragem atual</label>${kbdToggleBtn('editExpenseKm')}</div>
+        <input type="text" class="form-input" id="editExpenseKm" value="${r.km!=null?String(r.km).replace('.',','):''}" placeholder="Ex: 45820,5" inputmode="decimal" oninput="renderEditExpenseConsumoPreview()">
+      </div>`;
+    }
+    if (v && (v.medicao==='hor'||v.medicao==='ambos')) {
+      leituraHTML += `<div class="form-group">
+        <div class="form-label-row"><label class="form-label">⏱️ Horímetro atual (horas)</label>${kbdToggleBtn('editExpenseHor')}</div>
+        <input type="text" class="form-input" id="editExpenseHor" value="${r.hor!=null?String(r.hor).replace('.',','):''}" placeholder="Ex: 3420,5" inputmode="decimal" oninput="renderEditExpenseConsumoPreview()">
+      </div>`;
+    }
+    leituraHTML += `<div class="card card-pad" id="editExpenseConsumoPreview" style="margin-bottom:16px"></div>`;
+  }
   document.getElementById('editRecordContent').innerHTML=`
     <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
       <span style="font-size:28px">${v?getEmoji(v.tipo):'🚗'}</span>
@@ -2758,8 +2856,8 @@ function editExpense(id) {
       <input type="datetime-local" class="form-input" id="editExpenseDate" value="${dtLocal}">
     </div>
     <div class="form-group">
-      <div class="form-label-row"><label class="form-label">💰 Valor (R$)</label>${kbdToggleBtn('editExpenseValor')}</div>
-      <input type="text" class="form-input" id="editExpenseValor" value="${r.valor!=null?String(r.valor).replace('.',','):''}" placeholder="Ex: 150,00" inputmode="decimal">
+      <div class="form-label-row"><label class="form-label">💰 ${isComb?'Valor pago no abastecimento':'Valor'} (R$)</label>${kbdToggleBtn('editExpenseValor')}</div>
+      <input type="text" class="form-input" id="editExpenseValor" value="${r.valor!=null?String(r.valor).replace('.',','):''}" placeholder="Ex: 150,00" inputmode="decimal" oninput="renderEditExpenseConsumoPreview()">
     </div>
     <div class="form-group">
       <label class="form-label">🏷️ Categoria</label>
@@ -2768,6 +2866,7 @@ function editExpense(id) {
       </div>
       <input type="hidden" id="editExpenseCategoria" value="${r.categoria||''}">
     </div>
+    ${leituraHTML}
     <div class="form-group">
       <div class="form-label-row"><label class="form-label">💬 Observação</label>${kbdToggleBtn('editExpenseObs','text')}</div>
       <textarea class="form-input" id="editExpenseObs" rows="3" style="resize:none">${r.obs||''}</textarea>
@@ -2776,12 +2875,50 @@ function editExpense(id) {
   `;
   closeModal('modalDetail');
   openModal('modalEditRecord');
+  if (isComb) renderEditExpenseConsumoPreview();
 }
 function selectEditCategory(el) {
   const already = el.classList.contains('selected');
   el.parentElement.querySelectorAll('.tag').forEach(t=>t.classList.remove('selected'));
   document.getElementById('editExpenseCategoria').value = already ? '' : (el.dataset.cat||'');
   if(!already) el.classList.add('selected');
+}
+// Recalcula e exibe km/h anterior, litros abastecidos e consumo com base nos valores
+// que estão sendo digitados na tela de edição (sem precisar salvar antes).
+function renderEditExpenseConsumoPreview() {
+  const box = document.getElementById('editExpenseConsumoPreview');
+  if (!box) return;
+  const id = document.getElementById('editExpenseId').value;
+  const r = DB.expenses.find(x=>x.id===id); if (!r) return;
+  const v = DB.vehicles.find(x=>x.id===r.vehicleId);
+  const valorEl = document.getElementById('editExpenseValor');
+  const precoEl = document.getElementById('editExpensePrecoLitro');
+  const kmEl = document.getElementById('editExpenseKm');
+  const horEl = document.getElementById('editExpenseHor');
+  const valor = valorEl && valorEl.value.trim()!=='' ? parseDecimal(valorEl.value) : null;
+  const preco = precoEl && precoEl.value.trim()!=='' ? parseDecimal(precoEl.value) : null;
+  const km = kmEl && kmEl.value.trim()!=='' ? parseDecimal(kmEl.value) : null;
+  const hor = horEl && horEl.value.trim()!=='' ? parseDecimal(horEl.value) : null;
+  const litros = (valor!=null && !isNaN(valor) && preco!=null && !isNaN(preco) && preco>0) ? (valor/preco) : null;
+  // Usa uma versão temporária do registro (com os valores em edição) só pra achar o abastecimento anterior
+  const tempR = { ...r, km: (kmEl ? (isNaN(km)?null:km) : r.km), hor: (horEl ? (isNaN(hor)?null:hor) : r.hor) };
+  const b = getConsumoBreakdown(tempR);
+  const unidade = b && b.usaHor ? 'h' : 'km';
+  const icone = b && b.usaHor ? '⏱️' : '📍';
+  let consumoTxt = '—', consumoUnidade = v && v.medicao==='hor' ? 'h/L' : 'km/L';
+  if (b && b.delta>0 && litros) {
+    const c = b.delta / litros;
+    if (isFinite(c)) { consumoTxt = c.toLocaleString('pt-BR',{maximumFractionDigits:2}); consumoUnidade = b.usaHor ? 'h/L' : 'km/L'; }
+  }
+  box.innerHTML = `
+    <table style="width:100%">
+      <tr><td class="text-muted" style="padding:6px 0;font-size:14px">${icone} ${b?(b.usaHor?'Horímetro':'Km')+' anterior':'Km/Horímetro anterior'}</td><td style="text-align:right;font-weight:600">${b&&b.prevValor!=null?Number(b.prevValor).toLocaleString('pt-BR')+' '+unidade:'—'}</td></tr>
+      <tr><td class="text-muted" style="padding:6px 0;font-size:14px">${icone} ${b?(b.usaHor?'Horímetro':'Km')+' atual':'Km/Horímetro atual'}</td><td style="text-align:right;font-weight:600">${b&&b.atual!=null?Number(b.atual).toLocaleString('pt-BR')+' '+unidade:'—'}</td></tr>
+      <tr><td class="text-muted" style="padding:6px 0;font-size:14px">⛽ Litros abastecidos</td><td style="text-align:right;font-weight:600">${litros?litros.toLocaleString('pt-BR',{maximumFractionDigits:2})+' L':'—'}</td></tr>
+      <tr><td class="text-muted" style="padding:6px 0;font-size:14px;font-weight:700">🔥 Consumo</td><td style="text-align:right;font-weight:700;color:var(--primary)">${consumoTxt!=='—'?consumoTxt+' '+consumoUnidade:'—'}</td></tr>
+    </table>
+    ${!b?'<div class="form-hint" style="margin-top:6px">Sem abastecimento anterior válido deste veículo — consumo não pode ser calculado.</div>':''}
+  `;
 }
 async function saveEditExpense() {
   const id=document.getElementById('editExpenseId').value;
@@ -2790,8 +2927,16 @@ async function saveEditExpense() {
   const dateEl=document.getElementById('editExpenseDate');
   const catEl=document.getElementById('editExpenseCategoria');
   const obsEl=document.getElementById('editExpenseObs');
+  const precoEl=document.getElementById('editExpensePrecoLitro');
+  const kmEl=document.getElementById('editExpenseKm');
+  const horEl=document.getElementById('editExpenseHor');
   let newValor = valorEl.value.trim()!=='' ? parseDecimal(valorEl.value) : null;
   if (valorEl.value.trim()!=='' && (isNaN(newValor)||newValor<0)) { showToast('❌ Valor inválido!'); return; }
+  let newPrecoLitro = precoEl ? (precoEl.value.trim()!=='' ? parseDecimal(precoEl.value) : null) : r.precoLitro;
+  if (precoEl && precoEl.value.trim()!=='' && (isNaN(newPrecoLitro)||newPrecoLitro<0)) { showToast('❌ Preço por litro inválido!'); return; }
+  let newKm = kmEl ? (kmEl.value.trim()!=='' ? parseDecimal(kmEl.value) : null) : r.km;
+  let newHor = horEl ? (horEl.value.trim()!=='' ? parseDecimal(horEl.value) : null) : r.hor;
+  if ((kmEl&&kmEl.value.trim()!==''&&isNaN(newKm)) || (horEl&&horEl.value.trim()!==''&&isNaN(newHor))) { showToast('❌ Valor de leitura inválido!'); return; }
   const newDt = dateEl.value ? new Date(dateEl.value).toISOString() : r.dt;
   const newCat = catEl.value || null;
   const newObs = obsEl.value.trim();
@@ -2802,10 +2947,28 @@ async function saveEditExpense() {
       const resolved = await resolveEditPhotos(id, 'despesas');
       finalUrls = resolved.finalUrls; removed = resolved.removed;
     }
-    const { error } = await supa.from('despesas').update({ valor:newValor, categoria:newCat, dt:newDt, obs:newObs||null, fotos:finalUrls, photo_b64:finalUrls[0]||null, has_photo:finalUrls.length>0 }).eq('id', id);
-    if (error) throw new Error(error.message);
-    r.valor=newValor; r.categoria=newCat; r.dt=newDt; r.obs=newObs; r.photos=finalUrls; r.hasPhoto=finalUrls.length>0;
+    const payload = { valor:newValor, categoria:newCat, dt:newDt, km:newKm, hor:newHor, preco_litro:newPrecoLitro, obs:newObs||null, fotos:finalUrls, photo_b64:finalUrls[0]||null, has_photo:finalUrls.length>0 };
+    let { error } = await supa.from('despesas').update(payload).eq('id', id);
+    if (error) {
+      // Fallback: colunas km/hor/preco_litro podem ainda não existir na tabela 'despesas'
+      const { km, hor, preco_litro, ...payloadSemLeitura } = payload;
+      const retry = await supa.from('despesas').update(payloadSemLeitura).eq('id', id);
+      if (retry.error) throw new Error(retry.error.message);
+    }
+    r.valor=newValor; r.categoria=newCat; r.dt=newDt; r.km=newKm; r.hor=newHor; r.precoLitro=newPrecoLitro; r.obs=newObs; r.photos=finalUrls; r.hasPhoto=finalUrls.length>0;
     removed.forEach(deletePhotoFromStorage); // limpa do Storage as fotos removidas, sem bloquear
+    // Atualiza a referência de "última leitura" do veículo, caso este seja o lançamento mais recente com leitura
+    const v=DB.vehicles.find(x=>x.id===r.vehicleId);
+    if (v) {
+      const todasLeituras = [...DB.records, ...DB.expenses].filter(x=>x.vehicleId===v.id && (x.km!=null||x.hor!=null)).sort((a,b)=>new Date(b.dt)-new Date(a.dt));
+      const latest = todasLeituras[0];
+      if (latest) {
+        const updates={};
+        if (latest.km!=null && latest.km!==v.lastKm) { v.lastKm=latest.km; updates.last_km=latest.km; }
+        if (latest.hor!=null && latest.hor!==v.lastHor) { v.lastHor=latest.hor; updates.last_hor=latest.hor; }
+        if (Object.keys(updates).length) await supa.from('veiculos').update(updates).eq('id', v.id);
+      }
+    }
     saveLocal(); hideLoading(); closeModal('modalEditRecord');
     showToast('✅ Despesa atualizada!');
     refreshCurrentScreen();
@@ -3088,6 +3251,13 @@ function buildRecordDesc(r) {
 }
 function buildExpenseDesc(r) {
   let desc = (r.categoria || 'DESPESA').toUpperCase();
+  if (isCombustivelExp(r)) {
+    const litros = getLitrosAbastecidos(r);
+    const c = calcConsumo(r);
+    if (litros != null) desc += ` (${fmtNumBR(litros,2)}L`;
+    if (c) desc += `${litros!=null?' — ':' ('}${fmtNumBR(c.valor,2)}${c.usaHor?'H/L':'KM/L'}`;
+    if (litros != null || c) desc += ')';
+  }
   if (r.obs) desc += ' — ' + r.obs;
   return desc;
 }
@@ -3316,15 +3486,18 @@ function exportData() {
     const v=DB.vehicles.find(x=>x.id===r.vehicleId);
     const u=DB.users.find(x=>x.id===r.userId);
     const receita=r.valorUnitario!=null?calcReceita(r):null;
-    all.push({dt:r.dt, row:['Medição',fmtDateTime(r.dt),v?v.nome:'',v?v.placa:'',r.km!=null?String(r.km).replace('.',','):'',r.hor!=null?String(r.hor).replace('.',','):'','','',u?u.name:r.userId,r.obs||'',r.gps?`${r.gps.lat.toFixed(5)},${r.gps.lng.toFixed(5)}`:'', r.valorUnitario!=null?String(r.valorUnitario).replace('.',','):'', receita!=null?String(receita.toFixed(2)).replace('.',','):'']});
+    all.push({dt:r.dt, row:['Medição',fmtDateTime(r.dt),v?v.nome:'',v?v.placa:'',r.km!=null?String(r.km).replace('.',','):'',r.hor!=null?String(r.hor).replace('.',','):'','','',u?u.name:r.userId,r.obs||'',r.gps?`${r.gps.lat.toFixed(5)},${r.gps.lng.toFixed(5)}`:'', r.valorUnitario!=null?String(r.valorUnitario).replace('.',','):'', receita!=null?String(receita.toFixed(2)).replace('.',','):'','','']});
   });
   DB.expenses.forEach(r=>{
     const v=DB.vehicles.find(x=>x.id===r.vehicleId);
     const u=DB.users.find(x=>x.id===r.userId);
-    all.push({dt:r.dt, row:['Despesa',fmtDateTime(r.dt),v?v.nome:'',v?v.placa:'','','',r.valor!=null?String(r.valor).replace('.',','):'',r.categoria||'',u?u.name:r.userId,r.obs||'',r.gps?`${r.gps.lat.toFixed(5)},${r.gps.lng.toFixed(5)}`:'','','']});
+    const c = isCombustivelExp(r) ? calcConsumo(r) : null;
+    const consumoKm = c && !c.usaHor ? String(c.valor.toFixed(2)).replace('.',',') : '';
+    const consumoHor = c && c.usaHor ? String(c.valor.toFixed(2)).replace('.',',') : '';
+    all.push({dt:r.dt, row:['Despesa',fmtDateTime(r.dt),v?v.nome:'',v?v.placa:'',r.km!=null?String(r.km).replace('.',','):'',r.hor!=null?String(r.hor).replace('.',','):'',r.valor!=null?String(r.valor).replace('.',','):'',r.categoria||'',u?u.name:r.userId,r.obs||'',r.gps?`${r.gps.lat.toFixed(5)},${r.gps.lng.toFixed(5)}`:'','','',consumoKm,consumoHor]});
   });
   all.sort(compareByDateAndEntry);
-  const rows=[['Tipo','Data','Veículo','Placa','Km','Horímetro','Valor','Categoria','Colaborador','Obs','GPS','Valor unitário serviço','Receita'], ...all.map(x=>x.row)];
+  const rows=[['Tipo','Data','Veículo','Placa','Km','Horímetro','Valor','Categoria','Colaborador','Obs','GPS','Valor unitário serviço','Receita','Consumo (km/L)','Consumo (h/L)'], ...all.map(x=>x.row)];
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);

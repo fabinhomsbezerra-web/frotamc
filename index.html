@@ -3397,7 +3397,12 @@ async function generateVehicleReportPDF() {
       styles: { font: 'helvetica', fontSize: 8, cellPadding: 4 },
       headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [237, 242, 250] },
-      columnStyles: { 0: { cellWidth: 60 }, 2: { textColor: [37, 99, 235] }, 3: { textColor: [220, 38, 38] } }
+      columnStyles: {
+        0: { cellWidth: 60 },
+        2: { cellWidth: 62, halign: 'right', textColor: [37, 99, 235] },
+        3: { cellWidth: 62, halign: 'right', textColor: [220, 38, 38] },
+        4: { cellWidth: 66, halign: 'right' }
+      }
     });
   });
 

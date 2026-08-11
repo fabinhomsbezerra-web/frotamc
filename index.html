@@ -3234,6 +3234,18 @@ function fmtMoneyBR(v) {
   const n = Number(v) || 0;
   return `${n < 0 ? '-' : ''}R$ ${Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 }
+// Formata uma coluna inteira de valores monetários já alinhados entre si:
+// sinal fixo, "R$" fixo, e parte numérica alinhada pela casa decimal (padStart).
+// Requer fonte monoespaçada (courier) e halign 'left' na coluna para o alinhamento funcionar.
+function fmtMoneyColAligned(values) {
+  const abs = values.map(v => Math.abs(Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+  const maxLen = abs.reduce((m, s) => Math.max(m, s.length), 0);
+  return values.map((v, i) => {
+    const n = Number(v) || 0;
+    const sign = n < 0 ? '-' : ' ';
+    return `${sign}R$ ${abs[i].padStart(maxLen, ' ')}`;
+  });
+}
 // Monta a descrição de um lançamento de receita (medição), no mesmo espírito da planilha:
 // "INI. x FIN. y (delta UN)" + observação, se houver.
 function buildRecordDesc(r) {
@@ -3348,12 +3360,14 @@ async function generateVehicleReportPDF() {
   });
 
   // Tabela por veículo
-  const bodyRows = veiculosComMovimento.map(v => {
-    const ent = entradasPorVeiculo[v.id] || 0;
-    const sai = saidasPorVeiculo[v.id] || 0;
-    return [`${v.placa} - ${v.nome}`, fmtMoneyBR(ent), fmtMoneyBR(sai), fmtMoneyBR(ent - sai)];
-  });
-  bodyRows.push(['TOTAL GERAL', fmtMoneyBR(totalEntradas), fmtMoneyBR(totalSaidas), fmtMoneyBR(resultadoLiquido)]);
+  const veiculoLabels = [...veiculosComMovimento.map(v => `${v.placa} - ${v.nome}`), 'TOTAL GERAL'];
+  const entValues = [...veiculosComMovimento.map(v => entradasPorVeiculo[v.id] || 0), totalEntradas];
+  const saiValues = [...veiculosComMovimento.map(v => saidasPorVeiculo[v.id] || 0), totalSaidas];
+  const resValues = [...veiculosComMovimento.map(v => (entradasPorVeiculo[v.id] || 0) - (saidasPorVeiculo[v.id] || 0)), resultadoLiquido];
+  const entCol = fmtMoneyColAligned(entValues);
+  const saiCol = fmtMoneyColAligned(saiValues);
+  const resCol = fmtMoneyColAligned(resValues);
+  const bodyRows = veiculoLabels.map((label, i) => [label, entCol[i], saiCol[i], resCol[i]]);
 
   doc.autoTable({
     startY: cardY + cardH + 24,
@@ -3363,7 +3377,11 @@ async function generateVehicleReportPDF() {
     styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
     headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [237, 242, 250] },
-    columnStyles: { 1: { textColor: [37, 99, 235] }, 2: { textColor: [220, 38, 38] } },
+    columnStyles: {
+      1: { font: 'courier', halign: 'left', textColor: [37, 99, 235] },
+      2: { font: 'courier', halign: 'left', textColor: [220, 38, 38] },
+      3: { font: 'courier', halign: 'left' }
+    },
     didParseCell: (data) => {
       if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [220, 226, 236]; }
     }
@@ -3385,10 +3403,19 @@ async function generateVehicleReportPDF() {
 
     const lancamentos = (lancamentosPorVeiculo[v.id] || []).slice().sort((a, b) => new Date(a.dt) - new Date(b.dt));
     let acumulado = 0;
-    const rows = lancamentos.map(l => {
+    const acumuladoValues = [];
+    const rawRows = lancamentos.map(l => {
       acumulado += l.entrada - l.saida;
-      return [fmtDate(l.dt), l.desc, l.entrada ? fmtMoneyBR(l.entrada) : '', l.saida ? fmtMoneyBR(l.saida) : '', fmtMoneyBR(acumulado)];
+      acumuladoValues.push(acumulado);
+      return { dia: fmtDate(l.dt), desc: l.desc, entrada: l.entrada, saida: l.saida };
     });
+    // Colunas de ENTRADAS/SAÍDAS alinham só entre valores preenchidos (0 vira célula vazia, sem "R$ 0,00")
+    const entValues = rawRows.map(r => r.entrada || 0);
+    const saiValues = rawRows.map(r => r.saida || 0);
+    const entCol = fmtMoneyColAligned(entValues);
+    const saiCol = fmtMoneyColAligned(saiValues);
+    const acuCol = fmtMoneyColAligned(acumuladoValues);
+    const rows = rawRows.map((r, i) => [r.dia, r.desc, r.entrada ? entCol[i] : '', r.saida ? saiCol[i] : '', acuCol[i]]);
     doc.autoTable({
       startY: 82,
       margin: { left: margin, right: margin },
@@ -3399,9 +3426,9 @@ async function generateVehicleReportPDF() {
       alternateRowStyles: { fillColor: [237, 242, 250] },
       columnStyles: {
         0: { cellWidth: 60 },
-        2: { cellWidth: 62, halign: 'right', textColor: [37, 99, 235] },
-        3: { cellWidth: 62, halign: 'right', textColor: [220, 38, 38] },
-        4: { cellWidth: 66, halign: 'right' }
+        2: { cellWidth: 65, font: 'courier', halign: 'left', textColor: [37, 99, 235] },
+        3: { cellWidth: 65, font: 'courier', halign: 'left', textColor: [220, 38, 38] },
+        4: { cellWidth: 68, font: 'courier', halign: 'left' }
       }
     });
   });

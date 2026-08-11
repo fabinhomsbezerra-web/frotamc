@@ -3237,14 +3237,25 @@ function fmtMoneyBR(v) {
 // Formata uma coluna inteira de valores monetários já alinhados entre si:
 // sinal fixo, "R$" fixo, e parte numérica alinhada pela casa decimal (padStart).
 // Requer fonte monoespaçada (courier) e halign 'left' na coluna para o alinhamento funcionar.
-function fmtMoneyColAligned(values) {
-  const abs = values.map(v => Math.abs(Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
-  const maxLen = abs.reduce((m, s) => Math.max(m, s.length), 0);
-  return values.map((v, i) => {
-    const n = Number(v) || 0;
-    const sign = n < 0 ? '-' : ' ';
-    return `${sign}R$ ${abs[i].padStart(maxLen, ' ')}`;
-  });
+// Desenha uma célula monetária numa tabela do jsPDF-autoTable com "R$" fixo colado à
+// esquerda da coluna e o número alinhado à direita da coluna (decimais sempre alinhados,
+// pois o formato tem sempre 2 casas). Desenhar com coordenadas X explícitas em vez de
+// confiar em padding com fonte monoespaçada evita desalinhamentos em visualizadores de PDF
+// que não renderizam "courier" como verdadeiramente monoespaçada.
+function drawMoneyCell(doc, cell, value, opts) {
+  const { color = [20, 20, 30], font = 'helvetica', fontSize = 8, hideZero = false } = opts || {};
+  if (hideZero && !value) return;
+  const n = Number(value) || 0;
+  const symbol = `${n < 0 ? '-' : ''}R$`;
+  const absStr = Math.abs(n).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  const padL = cell.padding('left');
+  const padR = cell.padding('right');
+  const midY = cell.y + cell.height / 2;
+  doc.setFont(font, 'normal');
+  doc.setFontSize(fontSize);
+  doc.setTextColor(...color);
+  doc.text(symbol, cell.x + padL, midY, { align: 'left', baseline: 'middle' });
+  doc.text(absStr, cell.x + cell.width - padR, midY, { align: 'right', baseline: 'middle' });
 }
 // Monta a descrição de um lançamento de receita (medição), no mesmo espírito da planilha:
 // "INI. x FIN. y (delta UN)" + observação, se houver.
@@ -3361,13 +3372,10 @@ async function generateVehicleReportPDF() {
 
   // Tabela por veículo
   const veiculoLabels = [...veiculosComMovimento.map(v => `${v.placa} - ${v.nome}`), 'TOTAL GERAL'];
-  const entValues = [...veiculosComMovimento.map(v => entradasPorVeiculo[v.id] || 0), totalEntradas];
-  const saiValues = [...veiculosComMovimento.map(v => saidasPorVeiculo[v.id] || 0), totalSaidas];
-  const resValues = [...veiculosComMovimento.map(v => (entradasPorVeiculo[v.id] || 0) - (saidasPorVeiculo[v.id] || 0)), resultadoLiquido];
-  const entCol = fmtMoneyColAligned(entValues);
-  const saiCol = fmtMoneyColAligned(saiValues);
-  const resCol = fmtMoneyColAligned(resValues);
-  const bodyRows = veiculoLabels.map((label, i) => [label, entCol[i], saiCol[i], resCol[i]]);
+  const entValues1 = [...veiculosComMovimento.map(v => entradasPorVeiculo[v.id] || 0), totalEntradas];
+  const saiValues1 = [...veiculosComMovimento.map(v => saidasPorVeiculo[v.id] || 0), totalSaidas];
+  const resValues1 = [...veiculosComMovimento.map(v => (entradasPorVeiculo[v.id] || 0) - (saidasPorVeiculo[v.id] || 0)), resultadoLiquido];
+  const bodyRows = veiculoLabels.map(label => [label, '', '', '']);
 
   doc.autoTable({
     startY: cardY + cardH + 24,
@@ -3377,13 +3385,17 @@ async function generateVehicleReportPDF() {
     styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
     headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [237, 242, 250] },
-    columnStyles: {
-      1: { font: 'courier', halign: 'left', textColor: [37, 99, 235] },
-      2: { font: 'courier', halign: 'left', textColor: [220, 38, 38] },
-      3: { font: 'courier', halign: 'left' }
-    },
     didParseCell: (data) => {
       if (data.row.index === bodyRows.length - 1) { data.cell.styles.fontStyle = 'bold'; data.cell.styles.fillColor = [220, 226, 236]; }
+    },
+    didDrawCell: (data) => {
+      if (data.section !== 'body') return;
+      const i = data.row.index;
+      const bold = i === bodyRows.length - 1;
+      const opts = { fontSize: 9, font: 'helvetica' };
+      if (data.column.index === 1) drawMoneyCell(doc, data.cell, entValues1[i], { ...opts, color: [37, 99, 235] });
+      if (data.column.index === 2) drawMoneyCell(doc, data.cell, saiValues1[i], { ...opts, color: [220, 38, 38] });
+      if (data.column.index === 3) drawMoneyCell(doc, data.cell, resValues1[i], { ...opts, color: bold ? [20, 20, 30] : [20, 20, 30] });
     }
   });
 
@@ -3409,13 +3421,9 @@ async function generateVehicleReportPDF() {
       acumuladoValues.push(acumulado);
       return { dia: fmtDate(l.dt), desc: l.desc, entrada: l.entrada, saida: l.saida };
     });
-    // Colunas de ENTRADAS/SAÍDAS alinham só entre valores preenchidos (0 vira célula vazia, sem "R$ 0,00")
     const entValues = rawRows.map(r => r.entrada || 0);
     const saiValues = rawRows.map(r => r.saida || 0);
-    const entCol = fmtMoneyColAligned(entValues);
-    const saiCol = fmtMoneyColAligned(saiValues);
-    const acuCol = fmtMoneyColAligned(acumuladoValues);
-    const rows = rawRows.map((r, i) => [r.dia, r.desc, r.entrada ? entCol[i] : '', r.saida ? saiCol[i] : '', acuCol[i]]);
+    const rows = rawRows.map(r => [r.dia, r.desc, '', '', '']);
     doc.autoTable({
       startY: 82,
       margin: { left: margin, right: margin },
@@ -3424,11 +3432,13 @@ async function generateVehicleReportPDF() {
       styles: { font: 'helvetica', fontSize: 8, cellPadding: 4 },
       headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [237, 242, 250] },
-      columnStyles: {
-        0: { cellWidth: 60 },
-        2: { cellWidth: 65, font: 'courier', halign: 'left', textColor: [37, 99, 235] },
-        3: { cellWidth: 65, font: 'courier', halign: 'left', textColor: [220, 38, 38] },
-        4: { cellWidth: 68, font: 'courier', halign: 'left' }
+      columnStyles: { 0: { cellWidth: 60 }, 2: { cellWidth: 65 }, 3: { cellWidth: 65 }, 4: { cellWidth: 68 } },
+      didDrawCell: (data) => {
+        if (data.section !== 'body') return;
+        const i = data.row.index;
+        if (data.column.index === 2) drawMoneyCell(doc, data.cell, entValues[i], { color: [37, 99, 235], hideZero: true });
+        if (data.column.index === 3) drawMoneyCell(doc, data.cell, saiValues[i], { color: [220, 38, 38], hideZero: true });
+        if (data.column.index === 4) drawMoneyCell(doc, data.cell, acumuladoValues[i], { color: [20, 20, 30] });
       }
     });
   });

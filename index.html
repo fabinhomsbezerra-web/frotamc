@@ -2483,6 +2483,10 @@ function showRecordDetail(id) {
     const receita = calcReceita(r);
     vals.push(`<tr><td class="text-muted" style="padding:6px 0;">📈 Receita</td><td style="font-weight:700;text-align:right;color:#16a34a">R$ ${receita.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td></tr>`);
     const b = getReceitaBreakdown(r);
+    if (b) {
+      const unidadeVU = b.usaHor ? 'h' : 'km';
+      vals.push(`<tr><td class="text-muted" style="padding:6px 0;">💵 Valor da ${b.usaHor?'hora':'km'} trabalhada</td><td style="font-weight:700;text-align:right">R$ ${Number(r.valorUnitario).toLocaleString('pt-BR',{minimumFractionDigits:2})}/${unidadeVU}</td></tr>`);
+    }
     if (b && b.prevValor!=null) {
       const unidade = b.usaHor ? 'h' : 'km';
       const icone = b.usaHor ? '⏱️' : '📍';

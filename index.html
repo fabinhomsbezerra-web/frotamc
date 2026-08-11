@@ -2596,6 +2596,9 @@ function openFullPhoto(src, filename) {
   enablePhotoZoom(overlay.querySelector('#fpViewport'), overlay.querySelector('#fpImg'));
 }
 // Ativa zoom por pinça (pinch), duplo toque e arraste (pan) numa imagem dentro de um viewport.
+// Usa Touch Events nativos (em vez de Pointer Events) porque no iOS, quando o app está
+// instalado como atalho na tela de início (modo standalone/PWA), o multi-touch via
+// Pointer Events costuma falhar; Touch Events funcionam de forma confiável nesse modo.
 function enablePhotoZoom(viewport, img) {
   let scale=1, tx=0, ty=0;
   const MIN=1, MAX=5;
@@ -2616,57 +2619,73 @@ function enablePhotoZoom(viewport, img) {
     clamp();
     apply();
   }
-  const activePointers=new Map();
-  let startDist=0, startScale=1, dragging=false, lastX=0, lastY=0, lastTap=0;
-  // Duplo toque / duplo clique para alternar zoom
-  viewport.addEventListener('pointerdown', e=>{
-    const now=Date.now();
-    if(now-lastTap<300 && activePointers.size<=1){
-      const target = scale>1 ? 1 : 2.5;
-      zoomAt(e.clientX, e.clientY, target);
-    }
-    lastTap=now;
-  });
-  // Pinça (2 dedos) + arraste (1 dedo quando ampliado)
-  viewport.addEventListener('pointerdown', e=>{
-    viewport.setPointerCapture(e.pointerId);
-    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if(activePointers.size===1 && scale>1){
-      dragging=true; lastX=e.clientX; lastY=e.clientY;
-    } else if(activePointers.size===2){
-      dragging=false;
-      const pts=[...activePointers.values()];
-      startDist=Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+  function dist(t0,t1){ return Math.hypot(t0.clientX-t1.clientX, t0.clientY-t1.clientY); }
+  function mid(t0,t1){ return {x:(t0.clientX+t1.clientX)/2, y:(t0.clientY+t1.clientY)/2}; }
+
+  let mode=null; // 'pinch' | 'pan'
+  let startDist=0, startScale=1;
+  let lastX=0, lastY=0;
+  let lastTap=0;
+
+  viewport.addEventListener('touchstart', e=>{
+    if(e.touches.length===2){
+      mode='pinch';
+      startDist=dist(e.touches[0], e.touches[1]);
       startScale=scale;
-    }
-  });
-  viewport.addEventListener('pointermove', e=>{
-    if(!activePointers.has(e.pointerId)) return;
-    activePointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
-    if(activePointers.size===2){
-      const pts=[...activePointers.values()];
-      const dist=Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
-      if(startDist>0){
-        const newScale=Math.min(MAX, Math.max(MIN, startScale*(dist/startDist)));
-        const midX=(pts[0].x+pts[1].x)/2, midY=(pts[0].y+pts[1].y)/2;
-        zoomAt(midX, midY, newScale);
+    } else if(e.touches.length===1){
+      const now=Date.now();
+      const t=e.touches[0];
+      if(now-lastTap<300){
+        const target = scale>1 ? 1 : 2.5;
+        zoomAt(t.clientX, t.clientY, target);
+        mode=null;
+      } else if(scale>1){
+        mode='pan';
+        lastX=t.clientX; lastY=t.clientY;
+      } else {
+        mode=null;
       }
-    } else if(dragging && scale>1){
-      tx += e.clientX-lastX;
-      ty += e.clientY-lastY;
-      lastX=e.clientX; lastY=e.clientY;
+      lastTap=now;
+    }
+  }, {passive:true});
+
+  viewport.addEventListener('touchmove', e=>{
+    if(mode==='pinch' && e.touches.length===2){
+      e.preventDefault();
+      const d=dist(e.touches[0], e.touches[1]);
+      if(startDist>0){
+        const newScale=Math.min(MAX, Math.max(MIN, startScale*(d/startDist)));
+        const m=mid(e.touches[0], e.touches[1]);
+        zoomAt(m.x, m.y, newScale);
+      }
+    } else if(mode==='pan' && e.touches.length===1 && scale>1){
+      e.preventDefault();
+      const t=e.touches[0];
+      tx += t.clientX-lastX;
+      ty += t.clientY-lastY;
+      lastX=t.clientX; lastY=t.clientY;
       apply();
     }
-  });
-  function endPointer(e){
-    activePointers.delete(e.pointerId);
-    dragging = activePointers.size===1 && scale>1;
-    if(activePointers.size<2) startDist=0;
+  }, {passive:false});
+
+  function endTouch(e){
+    if(e.touches.length===0){
+      mode=null; startDist=0;
+    } else if(e.touches.length===1 && mode==='pinch'){
+      // Um dedo levantado durante uma pinça: se ainda estiver ampliado, passa a arrastar
+      mode = scale>1 ? 'pan' : null;
+      lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;
+      startDist=0;
+    }
   }
-  viewport.addEventListener('pointerup', endPointer);
-  viewport.addEventListener('pointercancel', endPointer);
-  viewport.addEventListener('pointerleave', endPointer);
-  // Scroll do mouse (desktop) para zoom
+  viewport.addEventListener('touchend', endTouch);
+  viewport.addEventListener('touchcancel', endTouch);
+
+  // Duplo clique / scroll do mouse (quando acessado via navegador desktop)
+  viewport.addEventListener('dblclick', e=>{
+    const target = scale>1 ? 1 : 2.5;
+    zoomAt(e.clientX, e.clientY, target);
+  });
   viewport.addEventListener('wheel', e=>{
     e.preventDefault();
     const newScale=Math.min(MAX, Math.max(MIN, scale - e.deltaY*0.0015*scale));

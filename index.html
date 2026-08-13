@@ -1062,8 +1062,14 @@ function attachmentDetailHTML(photos, filename) {
   return arr.map((photo, i) => {
     const fname = arr.length>1 ? `${filename}_${i+1}` : filename;
     if (isPdfAttachment(photo)) {
-      return `<div style="background:var(--surface2);border-radius:12px;padding:28px 16px;margin-bottom:8px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer" onclick="window.open('${photo}','_blank')">
-        <div style="font-size:40px">📄</div><div style="font-size:14px;font-weight:600;color:var(--text2)">${arr.length>1?`Documento ${i+1} de ${arr.length} (PDF) — toque para abrir`:'Documento PDF anexado — toque para abrir'}</div>
+      const pdfId = `pdfprev_${Math.random().toString(36).slice(2)}`;
+      return `<div style="background:var(--surface2);border-radius:12px;margin-bottom:8px;overflow:hidden;position:relative">
+        <iframe id="${pdfId}" src="${photo}#toolbar=0&navpanes=0" style="width:100%;height:340px;border:none;display:block;background:#fff" title="${fname}" onerror="this.style.display='none';document.getElementById('${pdfId}_fallback').style.display='flex'"></iframe>
+        <div id="${pdfId}_fallback" style="display:none;height:200px;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer" onclick="window.open('${photo}','_blank')">
+          <div style="font-size:40px">📄</div><div style="font-size:14px;font-weight:600;color:var(--text2)">${arr.length>1?`Documento ${i+1} de ${arr.length} (PDF) — toque para abrir`:'Documento PDF anexado — toque para abrir'}</div>
+        </div>
+        ${arr.length>1?`<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;pointer-events:none">${i+1} de ${arr.length}</div>`:''}
+        <div style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;cursor:pointer" onclick="window.open('${photo}','_blank')">⤢ Abrir</div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${fname}')">⬇️ Baixar PDF</button>

@@ -651,6 +651,25 @@ input[type="hidden"] { display: none; }
         <div style="text-align:center;padding:20px 0;color:var(--text3)">🔄 Calculando uso real do armazenamento...</div>
       </div>
     </div>
+    <div class="section-header">🗂️ Gerenciamento de Dados</div>
+    <div class="card" style="padding:16px;margin-bottom:20px;border:1.5px solid var(--danger)">
+      <div class="alert alert-danger" style="margin-bottom:16px">
+        <span class="alert-icon">⚠️</span>
+        <span>Área de <strong>exclusão permanente</strong>. Os registros (medições e despesas) removidos aqui não podem ser recuperados.</span>
+      </div>
+      <div class="form-group" style="display:flex;gap:10px;">
+        <div style="flex:1">
+          <label class="form-label">Data inicial</label>
+          <input type="date" class="form-input" id="dmDataInicial">
+        </div>
+        <div style="flex:1">
+          <label class="form-label">Data final</label>
+          <input type="date" class="form-input" id="dmDataFinal">
+        </div>
+      </div>
+      <div class="form-hint" style="margin-bottom:14px">Serão excluídos permanentemente os registros de medição e as despesas cuja data esteja entre as datas selecionadas (fuso de Brasília, incluindo o dia final).</div>
+      <button class="btn btn-danger" onclick="promptDeleteByPeriod()">🗑️ Excluir registros do período</button>
+    </div>
     <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
       <span>🏷️ Categorias de Despesa</span>
       <button class="btn-icon" onclick="openAddCategory()" title="Adicionar categoria">➕</button>
@@ -948,6 +967,36 @@ input[type="hidden"] { display: none; }
     </div>
   </div>
 </div>
+
+<!-- ════════════════════════════
+     MODAL: Confirmar Exclusão por Período (Gerenciamento de Dados)
+════════════════════════════ -->
+<div class="modal-overlay" id="modalConfirmPeriodDelete">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">⚠️ Excluir registros do período</div>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-danger" style="margin-bottom:16px">
+        <span class="alert-icon">⚠️</span>
+        <span id="periodDeleteWarningText"></span>
+      </div>
+      <div id="periodDeleteInfo" style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;font-size:14px;color:var(--text2);"></div>
+      <div id="periodDeleteDoubleConfirm" style="display:none;margin-bottom:16px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Digite <strong>EXCLUIR</strong> para confirmar esta exclusão em massa</label>
+          <input type="text" class="form-input" id="periodDeleteConfirmText" placeholder="EXCLUIR" oninput="updatePeriodDeleteButtonState()" autocomplete="off" autocapitalize="characters">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-secondary" onclick="closeModal('modalConfirmPeriodDelete')">Cancelar</button>
+        <button class="btn btn-danger" id="confirmPeriodDeleteBtn" onclick="executeDeleteByPeriod()">🗑️ Sim, excluir permanentemente</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- ════════════════════════════
      MODAL: Cadastrar Operador
@@ -1370,6 +1419,138 @@ async function saveStorageQuota() {
     showToast('✅ Capacidade de armazenamento atualizada!');
   } catch (e) {
     showToast('💾 Salvo neste dispositivo (crie a coluna storage_quota_gb na tabela app_config para sincronizar)', 6000);
+  }
+}
+
+// ══════════════════════════════
+// GERENCIAMENTO DE DADOS — exclusão de registros por período (somente admin)
+// ══════════════════════════════
+// Tabelas operacionais identificadas no projeto (ver mapRecord/mapExpense e syncFromCloud):
+//   - "registros" (medições de km/horímetro) — coluna de data: "dt"
+//   - "despesas"  (lançamentos financeiros)   — coluna de data: "dt"
+// Cadastros permanentes (veiculos, usuarios, categorias_despesa, app_config) NUNCA são tocados aqui.
+// O Brasil não usa mais horário de verão desde 2019 — por isso o período selecionado (datas
+// "YYYY-MM-DD") é convertido para limites reais do dia usando o offset fixo de Brasília (-03:00),
+// em vez do fuso do dispositivo, garantindo o resultado correto mesmo se o admin acessar de fora do país.
+const BR_UTC_OFFSET = '-03:00';
+function brDayStartISO(dateStr) { return `${dateStr}T00:00:00.000${BR_UTC_OFFSET}`; }
+function brDayEndISO(dateStr) { return `${dateStr}T23:59:59.999${BR_UTC_OFFSET}`; }
+const PERIOD_DELETE_DOUBLE_CONFIRM_THRESHOLD = 50; // acima disso, exige digitar "EXCLUIR"
+let periodDeletePending = null; // { fromStr, toStr, fromIso, toIso, countRegistros, countDespesas, total }
+
+function fmtDateBR(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
+}
+// Passo 1: valida os campos, consulta a contagem REAL no Supabase (sem depender do cache
+// local, que só guarda os 500 mais recentes) e abre o modal de confirmação.
+async function promptDeleteByPeriod() {
+  if (!currentUser || currentUser.role !== 'admin') { showToast('❌ Apenas administradores podem excluir registros'); return; }
+  const fromStr = (document.getElementById('dmDataInicial').value || '').trim();
+  const toStr = (document.getElementById('dmDataFinal').value || '').trim();
+  if (!fromStr || !toStr) { showToast('❌ Selecione a data inicial e a data final'); return; }
+  if (fromStr > toStr) { showToast('❌ A data inicial não pode ser posterior à data final'); return; }
+  const fromIso = brDayStartISO(fromStr);
+  const toIso = brDayEndISO(toStr);
+  showLoading('Consultando registros do período...');
+  try {
+    const [regRes, despRes] = await Promise.all([
+      supa.from('registros').select('id', { count: 'exact', head: true }).gte('dt', fromIso).lte('dt', toIso),
+      supa.from('despesas').select('id', { count: 'exact', head: true }).gte('dt', fromIso).lte('dt', toIso)
+    ]);
+    hideLoading();
+    if (regRes.error) throw regRes.error;
+    if (despRes.error) throw despRes.error;
+    const countRegistros = regRes.count || 0;
+    const countDespesas = despRes.count || 0;
+    const total = countRegistros + countDespesas;
+    periodDeletePending = { fromStr, toStr, fromIso, toIso, countRegistros, countDespesas, total };
+    if (total === 0) { showToast('ℹ️ Nenhum registro encontrado nesse período'); return; }
+    openPeriodDeleteConfirmModal();
+  } catch (e) {
+    hideLoading();
+    console.error('Erro ao consultar registros do período:', e);
+    showToast('❌ Não foi possível consultar os registros do período. Tente novamente.');
+  }
+}
+function openPeriodDeleteConfirmModal() {
+  const p = periodDeletePending;
+  if (!p) return;
+  document.getElementById('periodDeleteWarningText').innerHTML =
+    `<strong>ATENÇÃO:</strong> esta ação excluirá permanentemente todos os registros compreendidos entre <strong>${fmtDateBR(p.fromStr)}</strong> e <strong>${fmtDateBR(p.toStr)}</strong>. Essa ação não poderá ser desfeita.`;
+  document.getElementById('periodDeleteInfo').innerHTML =
+    `<div style="margin-bottom:4px">📋 <strong>${p.countRegistros}</strong> registro(s) de medição</div>
+     <div style="margin-bottom:4px">💰 <strong>${p.countDespesas}</strong> despesa(s)</div>
+     <div style="font-weight:700;margin-top:6px">Total: ${p.total} registro(s) serão excluídos</div>`;
+  const doubleConfirmBox = document.getElementById('periodDeleteDoubleConfirm');
+  const confirmInput = document.getElementById('periodDeleteConfirmText');
+  const needsDoubleConfirm = p.total >= PERIOD_DELETE_DOUBLE_CONFIRM_THRESHOLD;
+  confirmInput.value = '';
+  doubleConfirmBox.style.display = needsDoubleConfirm ? 'block' : 'none';
+  updatePeriodDeleteButtonState();
+  openModal('modalConfirmPeriodDelete');
+}
+function updatePeriodDeleteButtonState() {
+  const p = periodDeletePending;
+  const btn = document.getElementById('confirmPeriodDeleteBtn');
+  if (!p || !btn) return;
+  const needsDoubleConfirm = p.total >= PERIOD_DELETE_DOUBLE_CONFIRM_THRESHOLD;
+  if (!needsDoubleConfirm) { btn.disabled = false; btn.style.opacity = '1'; return; }
+  const typed = (document.getElementById('periodDeleteConfirmText').value || '').trim().toUpperCase();
+  const ok = typed === 'EXCLUIR';
+  btn.disabled = !ok;
+  btn.style.opacity = ok ? '1' : '0.5';
+}
+// Passo 2: exclusão de fato — direto no Supabase, apenas nas tabelas "registros" e "despesas",
+// dentro do período. Usa .delete().select() para receber as linhas removidas e então limpar
+// as fotos correspondentes no Storage (evita arquivos órfãos ocupando espaço).
+async function executeDeleteByPeriod() {
+  const p = periodDeletePending;
+  if (!p) return;
+  const needsDoubleConfirm = p.total >= PERIOD_DELETE_DOUBLE_CONFIRM_THRESHOLD;
+  if (needsDoubleConfirm) {
+    const typed = (document.getElementById('periodDeleteConfirmText').value || '').trim().toUpperCase();
+    if (typed !== 'EXCLUIR') { showToast('❌ Digite EXCLUIR para confirmar'); return; }
+  }
+  closeModal('modalConfirmPeriodDelete');
+  showLoading(`Excluindo ${p.total} registro(s)...`);
+  try {
+    const [regDel, despDel] = await Promise.all([
+      supa.from('registros').delete().gte('dt', p.fromIso).lte('dt', p.toIso).select('id, fotos, photo_b64'),
+      supa.from('despesas').delete().gte('dt', p.fromIso).lte('dt', p.toIso).select('id, fotos, photo_b64')
+    ]);
+    if (regDel.error) throw regDel.error;
+    if (despDel.error) throw despDel.error;
+    const deletedRegistros = regDel.data || [];
+    const deletedDespesas = despDel.data || [];
+    // Limpa as fotos/PDFs do Storage referentes aos registros excluídos (não bloqueia a UI)
+    [...deletedRegistros, ...deletedDespesas].forEach(row => {
+      const urls = Array.isArray(row.fotos) && row.fotos.length ? row.fotos : (row.photo_b64 ? [row.photo_b64] : []);
+      urls.forEach(deletePhotoFromStorage);
+    });
+    // Remove do cache local (registros/despesas já sincronizados) e da fila de pendentes offline
+    const deletedRegIds = new Set(deletedRegistros.map(r => r.id));
+    const deletedDespIds = new Set(deletedDespesas.map(r => r.id));
+    DB.records = DB.records.filter(r => !deletedRegIds.has(r.id));
+    DB.expenses = DB.expenses.filter(r => !deletedDespIds.has(r.id));
+    pendingSync = pendingSync.filter(r => !(localDateKey(r.dt) >= p.fromStr && localDateKey(r.dt) <= p.toStr));
+    pendingSyncExpenses = pendingSyncExpenses.filter(r => !(localDateKey(r.dt) >= p.fromStr && localDateKey(r.dt) <= p.toStr));
+    saveLocal();
+    const total = deletedRegistros.length + deletedDespesas.length;
+    hideLoading();
+    showToast(`🗑️ ${total} registro(s) excluído(s) permanentemente`, 4000);
+    document.getElementById('dmDataInicial').value = '';
+    document.getElementById('dmDataFinal').value = '';
+    periodDeletePending = null;
+    // Atualiza indicadores, relatórios, telas e o card de armazenamento
+    await syncFromCloud(true);
+    refreshCurrentScreen();
+    loadStorageUsage();
+  } catch (e) {
+    hideLoading();
+    console.error('Erro ao excluir registros do período:', e);
+    showToast('❌ Não foi possível concluir a exclusão. Nenhuma alteração local foi feita.');
   }
 }
 

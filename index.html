@@ -1080,7 +1080,7 @@ function renderPendingPdfThumbnails() {
         const metaEl = metaId && document.getElementById(metaId);
         if (metaEl) metaEl.textContent = 'PDF';
         const holder = canvas.parentElement;
-        if (holder) holder.innerHTML = '<div style="font-size:40px;padding:24px 0">📄</div>';
+        if (holder) holder.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;font-size:40px">📄</div>';
       }
     })();
   });
@@ -1119,7 +1119,7 @@ function attachmentDetailHTML(photos, filename) {
       const metaId = `pdfmeta_${Math.random().toString(36).slice(2)}`;
       const label = arr.length > 1 ? `${fname}.pdf` : `${filename}.pdf`;
       return `<div style="border-radius:12px;overflow:hidden;margin-bottom:8px;border:1px solid var(--border)">
-        <div style="background:#fff;min-height:110px;display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="window.open('${photo}','_blank')">
+        <div style="background:#fff;height:220px;overflow:hidden;cursor:pointer" onclick="window.open('${photo}','_blank')">
           <canvas id="${canvasId}" class="pdf-thumb-canvas" data-pdf-url="${photo}" data-meta-id="${metaId}" style="width:100%;display:block"></canvas>
         </div>
         <div style="background:var(--surface2);display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer" onclick="window.open('${photo}','_blank')">

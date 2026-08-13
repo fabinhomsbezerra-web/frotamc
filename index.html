@@ -1015,6 +1015,12 @@ input[type="hidden"] { display: none; }
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+</script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 const SUPA_URL = 'https://odxpsonlpznrinbuktri.supabase.co';
@@ -1032,6 +1038,53 @@ function dataUrlToBlob(dataUrl) {
   return new Blob([arr], { type: mime });
 }
 
+// Formata bytes em texto legível (KB/MB) para o card de PDF estilo WhatsApp
+function formatFileSize(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+// Varre a tela atual em busca de miniaturas de PDF pendentes (canvas com data-pdf-url
+// ainda não renderizado) e desenha a 1ª página de cada uma, estilo card do WhatsApp.
+// Chamar depois de qualquer innerHTML que possa ter inserido attachmentDetailHTML().
+function renderPendingPdfThumbnails() {
+  if (!window.pdfjsLib) return;
+  document.querySelectorAll('canvas.pdf-thumb-canvas[data-pdf-url]:not([data-rendered])').forEach(canvas => {
+    canvas.setAttribute('data-rendered', '1'); // evita renderizar 2x
+    const url = canvas.getAttribute('data-pdf-url');
+    const metaId = canvas.getAttribute('data-meta-id');
+    (async () => {
+      try {
+        const resp = await fetch(url);
+        const buf = await resp.arrayBuffer();
+        const sizeText = formatFileSize(buf.byteLength);
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const page = await pdf.getPage(1);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const targetWidth = canvas.parentElement.clientWidth || 320;
+        const scale = targetWidth / baseViewport.width;
+        const viewport = page.getViewport({ scale });
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = viewport.width * dpr;
+        canvas.height = viewport.height * dpr;
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const metaEl = metaId && document.getElementById(metaId);
+        if (metaEl) metaEl.textContent = `${pdf.numPages} página${pdf.numPages > 1 ? 's' : ''} · ${sizeText} · PDF`;
+      } catch (e) {
+        console.error('Erro ao gerar miniatura do PDF', e);
+        const metaEl = metaId && document.getElementById(metaId);
+        if (metaEl) metaEl.textContent = 'PDF';
+        const holder = canvas.parentElement;
+        if (holder) holder.innerHTML = '<div style="font-size:40px;padding:24px 0">📄</div>';
+      }
+    })();
+  });
+}
 // Verifica se um anexo (dataURL local ou URL pública do Storage) é um PDF
 function isPdfAttachment(url) {
   if (!url) return false;
@@ -1062,14 +1115,20 @@ function attachmentDetailHTML(photos, filename) {
   return arr.map((photo, i) => {
     const fname = arr.length>1 ? `${filename}_${i+1}` : filename;
     if (isPdfAttachment(photo)) {
-      const pdfId = `pdfprev_${Math.random().toString(36).slice(2)}`;
-      return `<div style="background:var(--surface2);border-radius:12px;margin-bottom:8px;overflow:hidden;position:relative">
-        <iframe id="${pdfId}" src="${photo}#toolbar=0&navpanes=0" style="width:100%;height:340px;border:none;display:block;background:#fff" title="${fname}" onerror="this.style.display='none';document.getElementById('${pdfId}_fallback').style.display='flex'"></iframe>
-        <div id="${pdfId}_fallback" style="display:none;height:200px;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer" onclick="window.open('${photo}','_blank')">
-          <div style="font-size:40px">📄</div><div style="font-size:14px;font-weight:600;color:var(--text2)">${arr.length>1?`Documento ${i+1} de ${arr.length} (PDF) — toque para abrir`:'Documento PDF anexado — toque para abrir'}</div>
+      const canvasId = `pdfthumb_${Math.random().toString(36).slice(2)}`;
+      const metaId = `pdfmeta_${Math.random().toString(36).slice(2)}`;
+      const label = arr.length > 1 ? `${fname}.pdf` : `${filename}.pdf`;
+      return `<div style="border-radius:12px;overflow:hidden;margin-bottom:8px;border:1px solid var(--border)">
+        <div style="background:#fff;min-height:110px;display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="window.open('${photo}','_blank')">
+          <canvas id="${canvasId}" class="pdf-thumb-canvas" data-pdf-url="${photo}" data-meta-id="${metaId}" style="width:100%;display:block"></canvas>
         </div>
-        ${arr.length>1?`<div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;pointer-events:none">${i+1} de ${arr.length}</div>`:''}
-        <div style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;font-weight:600;padding:4px 10px;border-radius:99px;cursor:pointer" onclick="window.open('${photo}','_blank')">⤢ Abrir</div>
+        <div style="background:var(--surface2);display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer" onclick="window.open('${photo}','_blank')">
+          <div style="background:#c62828;color:#fff;font-size:10px;font-weight:800;letter-spacing:.3px;border-radius:6px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0">PDF</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+            <div id="${metaId}" style="font-size:12px;color:var(--text3)">Carregando...</div>
+          </div>
+        </div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${fname}')">⬇️ Baixar PDF</button>
@@ -2517,6 +2576,7 @@ function showRecordDetail(id) {
     ${canDelete?`<button class="btn btn-danger" style="margin-top:8px" onclick="promptDeleteRecord('${r.id}')">🗑️ Excluir este registro</button>`:''}
   `;
   openModal('modalDetail');
+  requestAnimationFrame(renderPendingPdfThumbnails);
 }
 // Retorna "DD-MM-YYYY" no fuso LOCAL do dispositivo — usado nos nomes de arquivo
 function fmtFileDate(iso){
@@ -2748,6 +2808,7 @@ function showExpenseDetail(id) {
     ${canDelete?`<button class="btn btn-danger" style="margin-top:8px" onclick="promptDeleteExpense('${r.id}')">🗑️ Excluir esta despesa</button>`:''}
   `;
   openModal('modalDetail');
+  requestAnimationFrame(renderPendingPdfThumbnails);
 }
 function promptDeleteExpense(id) {
   const r=DB.expenses.find(x=>x.id===id);if(!r)return;

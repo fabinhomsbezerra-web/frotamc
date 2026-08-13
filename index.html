@@ -1117,14 +1117,8 @@ function attachmentDetailHTML(photos, filename) {
     if (isPdfAttachment(photo)) {
       const canvasId = `pdfthumb_${Math.random().toString(36).slice(2)}`;
       const metaId = `pdfmeta_${Math.random().toString(36).slice(2)}`;
-      return `<div style="border-radius:12px;overflow:hidden;margin-bottom:8px;border:1px solid var(--border)">
-        <div style="background:#fff;height:220px;overflow:hidden;cursor:pointer" onclick="window.open('${photo}','_blank')">
-          <canvas id="${canvasId}" class="pdf-thumb-canvas" data-pdf-url="${photo}" data-meta-id="${metaId}" style="width:100%;display:block"></canvas>
-        </div>
-        <div style="background:var(--surface2);display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer" onclick="window.open('${photo}','_blank')">
-          <div style="background:#c62828;color:#fff;font-size:10px;font-weight:800;letter-spacing:.3px;border-radius:6px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0">PDF</div>
-          <div id="${metaId}" style="font-size:13px;color:var(--text2);font-weight:600">Carregando...</div>
-        </div>
+      return `<div style="background:#fff;border-radius:12px;margin-bottom:8px;height:220px;overflow:hidden;cursor:pointer" onclick="window.open('${photo}','_blank')">
+        <canvas id="${canvasId}" class="pdf-thumb-canvas" data-pdf-url="${photo}" data-meta-id="${metaId}" style="width:100%;display:block"></canvas>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <button class="btn btn-secondary btn-sm" style="flex:1" onclick="downloadPhoto('${photo}','${fname}')">⬇️ Baixar PDF</button>

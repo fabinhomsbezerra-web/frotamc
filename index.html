@@ -643,6 +643,15 @@ input[type="hidden"] { display: none; }
       <button class="btn btn-primary" onclick="saveAppConfig()">✓ Salvar aparência</button>
     </div>
     <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span>📦 Armazenamento</span>
+      <button class="btn-icon" onclick="loadStorageUsage()" title="Atualizar">🔄</button>
+    </div>
+    <div class="card" style="padding:16px;margin-bottom:20px">
+      <div id="storageUsageContent">
+        <div style="text-align:center;padding:20px 0;color:var(--text3)">🔄 Calculando uso real do armazenamento...</div>
+      </div>
+    </div>
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
       <span>🏷️ Categorias de Despesa</span>
       <button class="btn-icon" onclick="openAddCategory()" title="Adicionar categoria">➕</button>
     </div>
@@ -1242,6 +1251,128 @@ async function saveAppConfig() {
   }
   cfgLogoPending = undefined;
 }
+
+// ══════════════════════════════
+// ARMAZENAMENTO (Supabase Storage) — uso real, sem valores fictícios
+// ══════════════════════════════
+// Quota total do plano Supabase (GB). Não existe endpoint público no cliente para
+// consultar a capacidade/plano da conta — por isso o admin informa manualmente o valor
+// real do seu plano (ex: 1 GB no Free, 100 GB no Pro), e o app persiste isso em app_config.
+let storageQuotaGb = 1;
+let storageUsageBytes = null;
+
+// Lista recursivamente todos os arquivos de um bucket do Supabase Storage e soma o
+// tamanho real (em bytes) de cada um, usando storage.metadata.size retornado pela própria
+// API do Storage — não é uma estimativa. Requer que o bucket tenha uma policy de SELECT
+// (list) liberada para o papel usado pelo app (mesmo papel "anon" que já faz upload/leitura
+// das fotos hoje) — não é necessário e NUNCA se deve usar a Service Role Key no frontend.
+async function listAllStorageObjects(bucket, path) {
+  path = path || '';
+  let all = [];
+  let offset = 0;
+  const limit = 1000;
+  while (true) {
+    const { data, error } = await supa.storage.from(bucket).list(path, { limit, offset, sortBy: { column: 'name', order: 'asc' } });
+    if (error) throw error;
+    if (!data || !data.length) break;
+    for (const item of data) {
+      const itemPath = path ? `${path}/${item.name}` : item.name;
+      if (item.id === null) {
+        // Entrada sem "id" = subpasta (ex: registros/, despesas/) — entra recursivamente
+        const nested = await listAllStorageObjects(bucket, itemPath);
+        all = all.concat(nested);
+      } else {
+        all.push({ path: itemPath, size: (item.metadata && item.metadata.size) || 0 });
+      }
+    }
+    if (data.length < limit) break;
+    offset += limit;
+  }
+  return all;
+}
+async function computeStorageUsageBytes() {
+  const objects = await listAllStorageObjects(PHOTO_BUCKET);
+  return objects.reduce((sum, o) => sum + (o.size || 0), 0);
+}
+// Formata bytes em B/KB/MB/GB legível
+function formatStorageSize(bytes) {
+  if (bytes == null || isNaN(bytes)) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+// Desenha o card de Armazenamento na tela de Configurações. state: 'loading' | 'error' | 'ok'
+function renderStorageUsageUI(state) {
+  const el = document.getElementById('storageUsageContent');
+  if (!el) return;
+  if (state === 'loading') {
+    el.innerHTML = `<div style="text-align:center;padding:20px 0;color:var(--text3)">🔄 Calculando uso real do armazenamento...</div>`;
+    return;
+  }
+  if (state === 'error') {
+    el.innerHTML = `
+      <div class="alert alert-danger" style="margin-bottom:12px"><span class="alert-icon">⚠️</span><span>Não foi possível consultar o Storage agora. Confirme se o bucket "${PHOTO_BUCKET}" tem uma policy de listagem (SELECT) liberada para o papel usado pelo app.</span></div>
+      <button class="btn btn-secondary" style="width:100%" onclick="loadStorageUsage()">🔄 Tentar novamente</button>
+    `;
+    return;
+  }
+  const usedBytes = storageUsageBytes || 0;
+  const quotaBytes = storageQuotaGb * 1024 * 1024 * 1024;
+  const pct = quotaBytes > 0 ? Math.min(100, (usedBytes / quotaBytes) * 100) : 0;
+  let barColor = 'var(--success)', statusLabel = 'Normal';
+  if (pct >= 90) { barColor = 'var(--danger)'; statusLabel = 'Crítico'; }
+  else if (pct >= 70) { barColor = 'var(--warning)'; statusLabel = 'Atenção'; }
+  const freeBytes = Math.max(0, quotaBytes - usedBytes);
+  el.innerHTML = `
+    <table style="width:100%;margin-bottom:14px">
+      <tr><td class="text-muted" style="padding:6px 0;">📦 Armazenamento utilizado</td><td style="font-weight:700;text-align:right">${formatStorageSize(usedBytes)}</td></tr>
+      <tr><td class="text-muted" style="padding:6px 0;">💾 Capacidade total</td><td style="font-weight:700;text-align:right">${storageQuotaGb.toLocaleString('pt-BR')} GB</td></tr>
+      <tr><td class="text-muted" style="padding:6px 0;">📊 Percentual utilizado</td><td style="font-weight:700;text-align:right;color:${barColor}">${pct.toFixed(1)}%</td></tr>
+    </table>
+    <div style="background:var(--surface2);border-radius:99px;height:10px;overflow:hidden;margin-bottom:8px">
+      <div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width .4s ease"></div>
+    </div>
+    <div class="text-sm text-muted" style="margin-bottom:16px">Espaço disponível: <strong>${formatStorageSize(freeBytes)}</strong> · Status: <strong style="color:${barColor}">${statusLabel}</strong></div>
+    <button class="btn btn-secondary" style="width:100%;margin-bottom:16px" onclick="loadStorageUsage()">🔄 Atualizar</button>
+    <div class="divider"></div>
+    <div class="form-group" style="margin-top:14px;margin-bottom:0">
+      <label class="form-label">Capacidade total do plano Supabase (GB)</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" min="0.1" step="0.1" class="form-input" id="cfgStorageQuota" value="${storageQuotaGb}" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="saveStorageQuota()">✓ Salvar</button>
+      </div>
+      <div class="form-hint">Informe a capacidade real do seu plano de Storage no Supabase (ex: 1 GB no Free, 100 GB no Pro) para o cálculo de percentual ficar correto.</div>
+    </div>
+  `;
+}
+// Consulta o Supabase Storage e recalcula o uso real — chamado ao abrir Configurações e pelo botão "Atualizar"
+async function loadStorageUsage() {
+  renderStorageUsageUI('loading');
+  try {
+    storageUsageBytes = await computeStorageUsageBytes();
+    renderStorageUsageUI('ok');
+  } catch (e) {
+    console.error('Erro ao calcular uso do Storage:', e);
+    renderStorageUsageUI('error');
+  }
+}
+async function saveStorageQuota() {
+  const input = document.getElementById('cfgStorageQuota');
+  const val = parseFloat(input && input.value);
+  if (!val || val <= 0) { showToast('❌ Informe um valor de capacidade válido'); return; }
+  storageQuotaGb = val;
+  saveLocal();
+  renderStorageUsageUI('ok');
+  try {
+    const { error } = await supa.from('app_config').upsert({ id: 'default', name: appConfig.name, emoji: appConfig.emoji, logo: appConfig.logo, storage_quota_gb: val });
+    if (error) throw error;
+    showToast('✅ Capacidade de armazenamento atualizada!');
+  } catch (e) {
+    showToast('💾 Salvo neste dispositivo (crie a coluna storage_quota_gb na tabela app_config para sincronizar)', 6000);
+  }
+}
+
 let currentUser = null;
 let regState = { step:0, kind:'medicao', vehicle:null, photos:[], km:null, hor:null, valor:null, precoLitro:null, categoria:'', sig:null, obs:'', gps:null, _ocrRaw:null, _ocrSuggested:null };
 let pendingSync = [];
@@ -1254,6 +1385,7 @@ function saveLocal() {
     localStorage.setItem('fc_pending', JSON.stringify(pendingSync));
     localStorage.setItem('fc_pending_expenses', JSON.stringify(pendingSyncExpenses));
     localStorage.setItem('fc_appConfig', JSON.stringify(appConfig));
+    localStorage.setItem('fc_storageQuotaGb', String(storageQuotaGb));
   } catch(e) {}
 }
 function loadLocal() {
@@ -1266,6 +1398,8 @@ function loadLocal() {
     if (pe) pendingSyncExpenses = JSON.parse(pe);
     const ac = localStorage.getItem('fc_appConfig');
     if (ac) appConfig = Object.assign({name:'FrotaMC',emoji:'🚛',logo:null}, JSON.parse(ac));
+    const sq = localStorage.getItem('fc_storageQuotaGb');
+    if (sq && !isNaN(parseFloat(sq))) storageQuotaGb = parseFloat(sq);
   } catch(e) {}
   applyAppConfig();
 }
@@ -1296,6 +1430,7 @@ async function syncFromCloud(silent) {
     if (acRes.status==='fulfilled' && acRes.value.data) {
       const d = acRes.value.data;
       appConfig = { name: d.name || 'FrotaMC', emoji: d.emoji || '🚛', logo: d.logo || null };
+      if (d.storage_quota_gb != null && !isNaN(parseFloat(d.storage_quota_gb))) storageQuotaGb = parseFloat(d.storage_quota_gb);
       applyAppConfig();
       anyOk = true;
     }
@@ -1591,7 +1726,7 @@ function showScreen(name, scrollTop) {
   if (name==='reports') { renderReports(); updateStats(); markReportsSeen(); }
   if (name==='vehicles') renderVehicleList();
   if (name==='operators') renderOperatorList();
-  if (name==='settings') { renderCategoryList(); renderAppConfigForm(); }
+  if (name==='settings') { renderCategoryList(); renderAppConfigForm(); loadStorageUsage(); }
   if (name==='home') renderHome();
   updateNotifBadge();
 }

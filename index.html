@@ -1339,8 +1339,8 @@ function renderStorageUsageUI(state) {
     <div class="form-group" style="margin-top:14px;margin-bottom:0">
       <label class="form-label">Capacidade total do plano Supabase (GB)</label>
       <div style="display:flex;gap:8px">
-        <input type="number" min="0.1" step="0.1" class="form-input" id="cfgStorageQuota" value="${storageQuotaGb}" style="flex:1">
-        <button class="btn btn-primary btn-sm" onclick="saveStorageQuota()">✓ Salvar</button>
+        <input type="number" min="0.1" step="0.1" class="form-input" id="cfgStorageQuota" value="${storageQuotaGb}" style="flex:1;min-width:0">
+        <button class="btn btn-primary btn-sm" style="width:auto;flex-shrink:0;white-space:nowrap" onclick="saveStorageQuota()">✓ Salvar</button>
       </div>
       <div class="form-hint">Informe a capacidade real do seu plano de Storage no Supabase (ex: 1 GB no Free, 100 GB no Pro) para o cálculo de percentual ficar correto.</div>
     </div>

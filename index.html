@@ -797,7 +797,10 @@ input[type="hidden"] { display: none; }
       </div>
     </div>
 
-    <div class="section-header">Histórico de registros</div>
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>Histórico de registros</span>
+      <span id="reportCountBadge" style="background:var(--surface2);color:var(--text);font-weight:700;font-size:12px;padding:3px 10px;border-radius:999px;letter-spacing:0;text-transform:none;">0</span>
+    </div>
     <div class="segmented" id="reportTypeTabs" style="display:flex;gap:6px;margin-bottom:12px;background:var(--surface2);border-radius:var(--radius-sm);padding:4px">
       <button type="button" class="seg-btn active" data-type="all" onclick="setReportType('all')" style="flex:1;border:none;background:var(--surface);color:var(--text);font-weight:600;font-size:13px;padding:8px 4px;border-radius:8px;cursor:pointer;box-shadow:var(--shadow)">Geral</button>
       <button type="button" class="seg-btn" data-type="medicao" onclick="setReportType('medicao')" style="flex:1;border:none;background:transparent;color:var(--text2);font-weight:600;font-size:13px;padding:8px 4px;border-radius:8px;cursor:pointer">Registros</button>
@@ -2809,6 +2812,11 @@ function applyFilters() {
   }
   const listFiltered = reportTypeFilter==='all' ? all : all.filter(r=>r._kind===reportTypeFilter);
   renderReportsList(listFiltered);
+  const countBadgeEl = document.getElementById('reportCountBadge');
+  if (countBadgeEl) {
+    const n = listFiltered.length;
+    countBadgeEl.textContent = `${n} ${n===1?'registro':'registros'}`;
+  }
 }
 function renderReports(){updateStats();}
 function renderReportsList(recs) {

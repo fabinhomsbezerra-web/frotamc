@@ -3744,8 +3744,14 @@ function buildRecordDesc(r) {
     const un = b.usaHor ? 'H' : 'KM';
     const atual = b.usaHor ? r.hor : r.km;
     desc = `SERVIÇO (INI. ${fmtNumBR(b.prevValor)} FIN. ${fmtNumBR(atual)}) ${fmtNumBR(b.delta)}${un}`;
+    if (r.valorUnitario != null) desc += ` - R$/${un} ${fmtNumBR(r.valorUnitario, 2)}`;
   } else {
     desc = 'SERVIÇO';
+    if (r.valorUnitario != null) {
+      const v = DB.vehicles.find(x => x.id === r.vehicleId);
+      const un = v && v.medicao === 'hor' ? 'H' : 'KM';
+      desc += ` - R$/${un} ${fmtNumBR(r.valorUnitario, 2)}`;
+    }
   }
   if (r.obs) desc += ' — ' + r.obs;
   return desc;

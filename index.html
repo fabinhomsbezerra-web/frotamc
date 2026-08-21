@@ -1079,7 +1079,7 @@ input[type="hidden"] { display: none; }
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
 const SUPA_URL = 'https://odxpsonlpznrinbuktri.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9keHBzb25scHpucmluYnVrdHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NDQ0NDIsImV4cCI6MjA5NzEyMDQ0Mn0.smy-2kUMSetaaC7SITqfEZG6ZwT7g0-FkDn1i_FZKUg';
@@ -3932,9 +3932,50 @@ function sheetNameSafe(str) {
   // Nomes de aba no Excel: máx. 31 caracteres e sem : \ / ? * [ ]
   return String(str).replace(/[:\\/?*\[\]]/g, ' ').trim().slice(0, 31) || 'Veículo';
 }
+// ── Paleta espelhando o PDF (mesmos RGB do jsPDF, em hex ARGB p/ ExcelJS) ──
+const XLS_COLOR = {
+  headerFill: 'FF1E3A8A',   // fillColor cabeçalho tabela do PDF [30,58,138]
+  headerText: 'FFFFFFFF',
+  altRow: 'FFEDF2FA',       // alternateRowStyles [237,242,250]
+  totalRow: 'FFDCE2EC',     // linha TOTAL GERAL [220,226,236]
+  titleText: 'FF14141E',    // [20,20,30]
+  subText: 'FF5A5A64',      // [90,90,100]
+  entradas: 'FF2563EB',     // [37,99,235]
+  saidas: 'FFDC2626',       // [220,38,38]
+  resultado: 'FF166534',    // [22,101,52]
+  margem: 'FFB4820A',       // [180,130,10]
+  cardBlue: 'FF2563EB',
+  cardRed: 'FFDC2626',
+  cardGreen: 'FF166534',
+  cardGold: 'FFB4820A',
+  border: 'FFCBD5E1'
+};
+const MONEY_FMT = '"R$" #,##0.00';
+const thinBorder = { style: 'thin', color: { argb: XLS_COLOR.border } };
+
+function xlsHeaderRow(ws, values, rowIdx) {
+  const row = ws.getRow(rowIdx);
+  row.values = values;
+  row.eachCell({ includeEmpty: true }, cell => {
+    cell.font = { name: 'Calibri', bold: true, color: { argb: XLS_COLOR.headerText } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLS_COLOR.headerFill } };
+    cell.alignment = { vertical: 'middle', horizontal: cell.col === 1 ? 'left' : 'center' };
+    cell.border = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+  });
+  row.height = 20;
+}
+
+function xlsMoneyCell(cell, value, colorArgb) {
+  cell.value = value;
+  cell.numFmt = MONEY_FMT;
+  cell.font = { name: 'Calibri', color: { argb: colorArgb } };
+  cell.alignment = { horizontal: 'right', vertical: 'middle' };
+  cell.border = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+}
+
 async function generateVehicleReportExcel() {
   if (!currentUser || !(currentUser.role === 'admin' || currentUser.role === 'visualizador')) { showToast('⚠️ Disponível apenas para administradores'); return; }
-  if (!window.XLSX) { showToast('❌ Biblioteca de Excel não carregou — verifique sua conexão'); return; }
+  if (!window.ExcelJS) { showToast('❌ Biblioteca de Excel não carregou — verifique sua conexão'); return; }
   const fromStr = document.getElementById('filterFrom').value;
   const toStr = document.getElementById('filterTo').value;
   showLoading('Gerando planilha...');
@@ -3944,57 +3985,165 @@ async function generateVehicleReportExcel() {
 
   if (!veiculosComMovimento.length) { hideLoading(); showToast('⚠️ Nenhum lançamento no período selecionado'); return; }
 
-  const wb = XLSX.utils.book_new();
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'FrotaMC';
+  wb.created = new Date();
 
-  // ── Aba RESUMO GERAL ──
-  const resumoAOA = [
-    ['RESUMO GERAL - CONTROLE DOS VEÍCULOS'],
-    [periodoLabel],
-    [],
-    ['VEÍCULO', 'ENTRADAS', 'SAÍDAS', 'RESULTADO']
+  // ══════════ ABA RESUMO GERAL ══════════
+  const wsResumo = wb.addWorksheet('Resumo Geral', { views: [{ showGridLines: false }] });
+  wsResumo.columns = [{ width: 34 }, { width: 16 }, { width: 16 }, { width: 16 }];
+
+  wsResumo.mergeCells('A1:D1');
+  const titleCell = wsResumo.getCell('A1');
+  titleCell.value = 'RESUMO GERAL - CONTROLE DOS VEÍCULOS';
+  titleCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: XLS_COLOR.titleText } };
+  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  wsResumo.getRow(1).height = 24;
+
+  wsResumo.mergeCells('A2:D2');
+  const subCell = wsResumo.getCell('A2');
+  subCell.value = periodoLabel;
+  subCell.font = { name: 'Calibri', italic: true, size: 10, color: { argb: XLS_COLOR.subText } };
+  subCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+  // "Cards" de totais (linha 4) — mesmas 4 métricas e cores do PDF
+  const cardDefs = [
+    { label: 'TOTAL DE ENTRADAS', value: totalEntradas, fmt: MONEY_FMT, color: XLS_COLOR.cardBlue },
+    { label: 'TOTAL DE SAÍDAS', value: totalSaidas, fmt: MONEY_FMT, color: XLS_COLOR.cardRed },
+    { label: 'RESULTADO LÍQUIDO', value: resultadoLiquido, fmt: MONEY_FMT, color: XLS_COLOR.cardGreen },
+    { label: 'MARGEM LÍQUIDA', value: margemLiquida / 100, fmt: '0.0%', color: XLS_COLOR.cardGold }
   ];
-  veiculosComMovimento.forEach(v => {
+  cardDefs.forEach((c, i) => {
+    const col = i + 1;
+    const labelCell = wsResumo.getRow(4).getCell(col);
+    labelCell.value = c.label;
+    labelCell.font = { name: 'Calibri', size: 8, bold: true, color: { argb: 'FFFFFFFF' } };
+    labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: c.color } };
+    labelCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    const valueCell = wsResumo.getRow(5).getCell(col);
+    valueCell.value = c.value;
+    valueCell.numFmt = c.fmt;
+    valueCell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+    valueCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: c.color } };
+    valueCell.alignment = { horizontal: 'center', vertical: 'middle' };
+  });
+  wsResumo.getRow(4).height = 26;
+  wsResumo.getRow(5).height = 22;
+
+  // Tabela por veículo (a partir da linha 7)
+  const headRowIdx = 7;
+  xlsHeaderRow(wsResumo, ['VEÍCULO', 'ENTRADAS', 'SAÍDAS', 'RESULTADO'], headRowIdx);
+
+  veiculosComMovimento.forEach((v, i) => {
+    const r = wsResumo.getRow(headRowIdx + 1 + i);
     const ent = entradasPorVeiculo[v.id] || 0;
     const sai = saidasPorVeiculo[v.id] || 0;
-    resumoAOA.push([`${v.placa} - ${v.nome}`, ent, sai, ent - sai]);
+    const nomeCell = r.getCell(1);
+    nomeCell.value = `${v.placa} - ${v.nome}`;
+    nomeCell.font = { name: 'Calibri', color: { argb: XLS_COLOR.titleText } };
+    nomeCell.border = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+    xlsMoneyCell(r.getCell(2), ent, XLS_COLOR.entradas);
+    xlsMoneyCell(r.getCell(3), sai, XLS_COLOR.saidas);
+    xlsMoneyCell(r.getCell(4), ent - sai, XLS_COLOR.titleText);
+    if (i % 2 === 1) r.eachCell({ includeEmpty: true }, cell => { if (!cell.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLS_COLOR.altRow } }; });
   });
-  resumoAOA.push(['TOTAL GERAL', totalEntradas, totalSaidas, resultadoLiquido]);
-  resumoAOA.push([]);
-  resumoAOA.push(['MARGEM LÍQUIDA', `${margemLiquida.toFixed(1)}%`]);
-  const wsResumo = XLSX.utils.aoa_to_sheet(resumoAOA);
-  wsResumo['!cols'] = [{ wch: 32 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo Geral');
 
-  // ── Uma aba por veículo: extrato detalhado ──
+  // Linha TOTAL GERAL em destaque
+  const totalRowIdx = headRowIdx + 1 + veiculosComMovimento.length;
+  const totalRow = wsResumo.getRow(totalRowIdx);
+  const totalLabelCell = totalRow.getCell(1);
+  totalLabelCell.value = 'TOTAL GERAL';
+  totalLabelCell.font = { name: 'Calibri', bold: true, color: { argb: XLS_COLOR.titleText } };
+  totalLabelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLS_COLOR.totalRow } };
+  totalLabelCell.border = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+  [
+    [2, totalEntradas, XLS_COLOR.entradas],
+    [3, totalSaidas, XLS_COLOR.saidas],
+    [4, resultadoLiquido, XLS_COLOR.titleText]
+  ].forEach(([col, val, color]) => {
+    const cell = totalRow.getCell(col);
+    xlsMoneyCell(cell, val, color);
+    cell.font.bold = true;
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLS_COLOR.totalRow } };
+  });
+
+  // ══════════ UMA ABA POR VEÍCULO: extrato detalhado ══════════
   const nomesUsados = {};
   veiculosComMovimento.forEach(v => {
-    const lancamentos = (lancamentosPorVeiculo[v.id] || []).slice().sort((a, b) => new Date(a.dt) - new Date(b.dt));
-    let acumulado = 0;
-    const aoa = [
-      [`VEÍCULO: ${v.placa} - ${v.nome}`],
-      [periodoLabel],
-      [],
-      ['DIA', 'DESCRIÇÃO', 'ENTRADAS', 'SAÍDAS', 'ACUMULADO']
-    ];
-    lancamentos.forEach(l => {
-      acumulado += l.entrada - l.saida;
-      aoa.push([fmtDate(l.dt), l.desc, l.entrada || '', l.saida || '', acumulado]);
-    });
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{ wch: 12 }, { wch: 50 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
     let sheetName = sheetNameSafe(`${v.placa} ${v.nome}`);
-    // Garante nomes de aba únicos (caso truncados coincidam)
     if (nomesUsados[sheetName]) {
       nomesUsados[sheetName]++;
       sheetName = sheetNameSafe(sheetName).slice(0, 28) + ' ' + nomesUsados[sheetName];
     } else {
       nomesUsados[sheetName] = 1;
     }
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const ws = wb.addWorksheet(sheetName, { views: [{ showGridLines: false }] });
+    ws.columns = [{ width: 13 }, { width: 50 }, { width: 15 }, { width: 15 }, { width: 15 }];
+
+    const ent = entradasPorVeiculo[v.id] || 0;
+    const sai = saidasPorVeiculo[v.id] || 0;
+
+    ws.mergeCells('A1:E1');
+    const titleC = ws.getCell('A1');
+    titleC.value = `VEÍCULO: ${v.placa} - ${v.nome.toUpperCase()}`;
+    titleC.font = { name: 'Calibri', size: 13, bold: true, color: { argb: XLS_COLOR.titleText } };
+    ws.getRow(1).height = 22;
+
+    ws.mergeCells('A2:E2');
+    const subC = ws.getCell('A2');
+    subC.value = periodoLabel;
+    subC.font = { name: 'Calibri', size: 9, color: { argb: XLS_COLOR.subText } };
+
+    // Totais do veículo (linha 3), alinhados à direita como no PDF
+    ws.mergeCells('A3:C3');
+    const entC = ws.getCell('D3');
+    entC.value = `ENTRADAS ${fmtMoneyBR(ent)}`;
+    entC.font = { name: 'Calibri', size: 9, bold: true, color: { argb: XLS_COLOR.entradas } };
+    ws.mergeCells('D3:E3');
+    const saiC = ws.getCell('A4');
+    ws.mergeCells('A4:C4');
+    saiC.value = '';
+    const saiCell = ws.getCell('D4');
+    saiCell.value = `SAÍDAS ${fmtMoneyBR(sai)}`;
+    saiCell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: XLS_COLOR.saidas } };
+    ws.mergeCells('D4:E4');
+    const resCell = ws.getCell('D5');
+    resCell.value = `RESULTADO ${fmtMoneyBR(ent - sai)}`;
+    resCell.font = { name: 'Calibri', size: 9, bold: true, color: { argb: XLS_COLOR.resultado } };
+    ws.mergeCells('D5:E5');
+
+    const headRow = 7;
+    xlsHeaderRow(ws, ['DIA', 'DESCRIÇÃO', 'ENTRADAS', 'SAÍDAS', 'ACUMULADO'], headRow);
+
+    const lancamentos = (lancamentosPorVeiculo[v.id] || []).slice().sort((a, b) => new Date(a.dt) - new Date(b.dt));
+    let acumulado = 0;
+    lancamentos.forEach((l, i) => {
+      acumulado += l.entrada - l.saida;
+      const r = ws.getRow(headRow + 1 + i);
+      const diaCell = r.getCell(1);
+      diaCell.value = fmtDate(l.dt);
+      diaCell.font = { name: 'Calibri', size: 9, color: { argb: XLS_COLOR.titleText } };
+      diaCell.border = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+      const descCell = r.getCell(2);
+      descCell.value = l.desc;
+      descCell.font = { name: 'Calibri', size: 9, color: { argb: XLS_COLOR.titleText } };
+      descCell.border = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+      if (l.entrada) xlsMoneyCell(r.getCell(3), l.entrada, XLS_COLOR.entradas); else { r.getCell(3).border = diaCell.border; }
+      if (l.saida) xlsMoneyCell(r.getCell(4), l.saida, XLS_COLOR.saidas); else { r.getCell(4).border = diaCell.border; }
+      xlsMoneyCell(r.getCell(5), acumulado, XLS_COLOR.titleText);
+      if (i % 2 === 1) r.eachCell({ includeEmpty: true }, cell => { if (!cell.fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLS_COLOR.altRow } }; });
+    });
   });
 
   const periodoArquivo = `${fromStr || 'inicio'}_a_${toStr || 'hoje'}`;
-  XLSX.writeFile(wb, `frotamc_relatorio_geral_${periodoArquivo}.xlsx`);
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `frotamc_relatorio_geral_${periodoArquivo}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
   hideLoading();
   showToast('✅ Relatório Excel gerado!');
 }
